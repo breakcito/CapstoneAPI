@@ -13,21 +13,13 @@ class AlmacenesData
      *
      * Filtros:
      * - id_almacen: devuelve solo la fila correspondiente.
-     * - para_carbon: true|false|null. Si es null, NO se aplica filtro (se
-     *   devuelven tanto de logistica como de carbon). El caller decide.
-     *
-     * Devuelve tambien los datos de ubicacion (departamento/provincia/distrito
-     * y direccion) cuando estan registrados.
      */
-    public static function get_almacenes(?int $id_almacen = null, ?bool $para_carbon = null)
+    public static function get_almacenes(?int $id_almacen = null)
     {
         $sql = '
         SELECT
             a.id AS id_almacen,
             a.nombre,
-            a.descripcion,
-            a.es_principal,
-            a.para_carbon,
             a.direccion,
             a.id_departamento,
             a.id_provincia,
@@ -44,14 +36,7 @@ class AlmacenesData
                 WHERE
                     ra.id_almacen = a.id AND
                     ra.estado = "Activo"
-            ) AS responsables,
-            (
-                SELECT
-                    COUNT(*)
-                FROM almacen_mina am
-                WHERE
-                    am.id_almacen = a.id
-            ) AS minas_count -- a cuantas minas abastece
+            ) AS responsables
         FROM
             almacen a
         LEFT JOIN departamento d  ON d.id  = a.id_departamento
@@ -69,12 +54,7 @@ class AlmacenesData
             return DB::selectOne($sql, $params);
         }
 
-        if ($para_carbon !== null) {
-            $sql .= ' AND a.para_carbon = :para_carbon';
-            $params['para_carbon'] = $para_carbon ? 1 : 0;
-        }
-
-        $sql .= ' ORDER BY a.es_principal DESC, a.nombre ASC';
+        $sql .= ' ORDER BY a.nombre ASC';
 
         return DB::select($sql, $params);
     }
@@ -89,18 +69,9 @@ class AlmacenesData
 
     /**
      * Helper para registrar un almacen.
-     *
-     * - para_carbon: lo establece el caller (la vista de logistica pasa false,
-     *   la vista de carbon pasa true).
-     * - id_departamento / id_provincia / id_distrito / direccion: opcionales.
-     *   Si se pasan, quedan persistidos. La cascada geografica es responsabilidad
-     *   del caller (no se valida aqui que la provincia pertenezca al depto, etc).
      */
     public static function crear_almacen(
         string $nombre,
-        ?string $descripcion = null,
-        bool $es_principal = false,
-        bool $para_carbon = false,
         ?int $id_departamento = null,
         ?int $id_provincia = null,
         ?int $id_distrito = null,
@@ -108,9 +79,6 @@ class AlmacenesData
     ) {
         return Almacen::insertGetId([
             'nombre' => $nombre,
-            'descripcion' => $descripcion,
-            'es_principal' => $es_principal,
-            'para_carbon' => $para_carbon,
             'id_departamento' => $id_departamento,
             'id_provincia' => $id_provincia,
             'id_distrito' => $id_distrito,
@@ -120,12 +88,42 @@ class AlmacenesData
     }
 
     /**
-     * Verificar si ya existe un almacen activo o inactivo con el mismo nombre
+     * Actualizar un almacen
      */
-    public static function verificar_nombre_duplicado(string $nombre)
+    public static function actualizar_almacen(
+        int $id_almacen,
+        string $nombre,
+        ?int $id_departamento = null,
+        ?int $id_provincia = null,
+        ?int $id_distrito = null,
+        ?string $direccion = null,
+    ): bool {
+        return Almacen::where('id', $id_almacen)->update([
+            'nombre' => $nombre,
+            'id_departamento' => $id_departamento,
+            'id_provincia' => $id_provincia,
+            'id_distrito' => $id_distrito,
+            'direccion' => $direccion,
+        ]) >= 0;
+    }
+
+    /**
+     * Inactivar/eliminar un almacen
+     */
+    public static function eliminar_almacen(int $id_almacen): bool
+    {
+        return Almacen::where('id', $id_almacen)->update([
+            'estado' => EstadoBase::Inactivo->value,
+        ]) > 0;
+    }
+
+    /**
+     * Verificar si ya existe un almacen con el mismo nombre
+     */
+    public static function verificar_nombre_duplicado(string $nombre, ?int $id_almacen_excluir = null)
     {
         return Almacen::where('nombre', $nombre)
-            ->where('estado', [EstadoBase::Activo->value, EstadoBase::Inactivo->value])
+            ->when($id_almacen_excluir !== null, fn($q) => $q->where('id', '!=', $id_almacen_excluir))
             ->exists();
     }
 }

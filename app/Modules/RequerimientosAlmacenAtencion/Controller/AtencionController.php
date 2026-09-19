@@ -2,7 +2,6 @@
 
 namespace App\Modules\RequerimientosAlmacenAtencion\Controller;
 
-use App\Shared\Enums\_Generic\Premura;
 use App\Shared\Responses\ApiResponse;
 use App\Modules\RequerimientosAlmacenAtencion\Service\AtencionService;
 use Illuminate\Http\JsonResponse;
@@ -45,13 +44,8 @@ class AtencionController extends Controller
         }
 
         $reglas = [
-            'id_empleado_solicitante' => 'nullable|integer',
             'id_contratista_solicitante' => 'nullable|integer',
-            'id_labor' => 'nullable|integer',
             'id_almacen_destino' => 'required|integer',
-            'es_auditable' => 'required|boolean',
-            'premura' => 'required|string',
-            'fecha_entrega_requerida' => 'required|date',
             'fecha_solicitud' => 'nullable|date',
             'observacion' => 'nullable|string',
             'detalles' => 'required|array|min:1',
@@ -60,11 +54,6 @@ class AtencionController extends Controller
             'detalles.*.cantidad_solicitada' => 'required|numeric|min:0.01',
             'detalles.*.contenido_por_presentacion' => 'required|numeric|min:0.01',
             'detalles.*.comentario' => 'nullable|string',
-            'detalles.*.para_mantenimiento' => 'nullable|boolean',
-            'detalles.*.id_activo_fijo_destino' => 'nullable|integer',
-            // Campos de cálculo inteligente con magnitud (opcional; cuando
-            // `con_magnitud=1` el sistema usa `cantidad_items` y
-            // `valor_magnitud_base` para reconstruir el total en base).
             'detalles.*.con_magnitud' => 'nullable|boolean',
             'detalles.*.cantidad_items' => 'nullable|numeric|min:0',
             'detalles.*.valor_magnitud' => 'nullable|numeric|min:0',
@@ -83,20 +72,14 @@ class AtencionController extends Controller
         $id_empleado_registro = $authUser->id_empleado;
         $evidencias = $request->file('evidencias', []);
 
-        $premura = Premura::from($request->input('premura'));
         try {
             $resultado = AtencionService::registrar_requerimiento(
-                id_empleado_solicitante: $request->id_empleado_solicitante ? (int) $request->id_empleado_solicitante : null,
                 id_contratista_solicitante: $request->id_contratista_solicitante ? (int) $request->id_contratista_solicitante : null,
                 id_empleado_registro: (int) $id_empleado_registro,
-                id_labor: $request->id_labor ? (int) $request->id_labor : null,
                 id_almacen_destino: (int) $request->id_almacen_destino,
-                es_auditable: (bool) $request->es_auditable,
-                premura: $premura,
-                observacion: $request->observacion,
-                fecha_entrega_requerida: $request->fecha_entrega_requerida,
-                fecha_solicitud: $request->fecha_solicitud,
                 detalles: $request->detalles,
+                fecha_solicitud: $request->fecha_solicitud,
+                observacion: $request->observacion,
                 evidencias: $evidencias
             );
 

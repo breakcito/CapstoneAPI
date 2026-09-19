@@ -3,7 +3,6 @@
 namespace App\Modules\RequerimientosAlmacenAtencion\Data;
 
 use App\Models\RequerimientoAlmacen;
-use App\Shared\Enums\_Generic\Premura;
 use App\Shared\Enums\RequerimientoAlmacen\EstadoRequerimiento;
 use App\Shared\Helpers\ArchivoHelper;
 use App\Shared\Helpers\CorrelativoHelper;
@@ -123,34 +122,24 @@ class RequerimientosData
 
 
     public static function crear_requerimiento(
-        ?int $id_empleado_solicitante,
         ?int $id_contratista_solicitante,
         int $id_empleado_registro,
-        ?int $id_labor,
         int $id_almacen_destino,
         string $correlativo,
         int $numero_correlativo,
-        bool $es_auditable,
-        Premura $premura,
-        ?string $observacion,
-        ?string $fecha_entrega_requerida,
+        ?string $observacion = null,
         ?string $fecha_solicitud = null,
         ?array $evidencias = null
     ) {
         return RequerimientoAlmacen::insertGetId([
-            'id_empleado_solicitante' => $id_empleado_solicitante,
             'id_contratista_solicitante' => $id_contratista_solicitante,
             'id_empleado_registro' => $id_empleado_registro,
-            'id_labor' => $id_labor,
             'id_almacen_destino' => $id_almacen_destino,
             'correlativo' => $correlativo,
             'numero_correlativo' => $numero_correlativo,
-            'es_auditable' => $es_auditable,
-            'premura' => $premura->value,
             'observacion' => $observacion,
             'evidencias' => $evidencias ? json_encode($evidencias) : null,
-            'fecha_entrega_requerida' => $fecha_entrega_requerida,
-            'fecha_solicitud' => $fecha_solicitud,
+            'fecha_solicitud' => $fecha_solicitud ?? now()->toDateString(),
             'created_at' => now(),
             'estado' => EstadoRequerimiento::Generado->value,
         ]);

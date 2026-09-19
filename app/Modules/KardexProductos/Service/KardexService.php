@@ -10,7 +10,7 @@ class KardexService
     /**
      * Listar movimientos de kardex por almacén.
      */
-    public static function get_resumen_kardex(int $id_almacen, int $mes, int $yearcito)
+    public static function get_resumen_kardex(int $id_almacen, ?int $mes = null, ?int $yearcito = null)
     {
         $movimientos = KardexData::get_resumen_kardex($id_almacen, $mes, $yearcito);
         return ApiResponse::success($movimientos);

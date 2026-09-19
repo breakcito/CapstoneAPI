@@ -7,31 +7,24 @@ use Illuminate\Support\Facades\DB;
 class KardexData
 {
     /**
-     * Listar movimientos de kardex por almacén y periodo.
+     * Listar movimientos de kardex por almacén y periodo opcional.
      */
-    public static function get_resumen_kardex(int $id_almacen, int $mes, int $yearcito)
+    public static function get_resumen_kardex(int $id_almacen, ?int $mes = null, ?int $yearcito = null)
     {
         $sql = '
         SELECT 
             k.id AS id_kardex,
+            k.id_almacen,
             
             -- producto
             lp.id_producto,
             p.nombre AS producto,
-            p.es_auditable,
-            
-            -- categoria
-            p.id_categoria,
-            cat.nombre as categoria,
+            p.tipo_producto,
             
             -- datos del lote
             k.id_lote_producto,
             lp.correlativo as correlativo_lote,
             lp.contenido_por_presentacion,
-            
-            -- datos del activo
-            k.id_activo_fijo,
-            act.correlativo as correlativo_activo_fijo,
             
             -- unidad base del producto
             p.id_unidad_medida_base,
@@ -60,41 +53,32 @@ class KardexData
             k.stock_resultante,
             k.stock_resultante_base,
             
-            -- costos promedio
-            p.moneda,
-            k.costo_promedio_base, 
-            k.costo_promedio_por_presentacion, 
-            k.subtotal_promedio, 
-            
-            -- costos reales - todo en soles
-            (lp.costo_por_unidad / lp.contenido_por_presentacion) as costo_por_unidad_base, -- un par
-            lp.costo_por_unidad, -- una docenta
-            lp.costo_por_unidad * k.cantidad_movimiento as subtotal, -- 
+            -- costos
+            k.costo,
+            lp.costo_por_unidad,
+            lp.costo_por_unidad_base,
             
             k.created_at
         FROM
             kardex_producto k
-        -- Se mantiene LEFT JOIN porque el movimiento es de uno u otro
         LEFT JOIN lote_producto lp ON lp.id = k.id_lote_producto
-        LEFT JOIN activo_fijo act ON act.id = k.id_activo_fijo
-
-        -- CORRECCIÓN: Evalúa correctamente el ID del producto que corresponda
-        INNER JOIN producto p ON p.id = COALESCE(lp.id_producto, act.id_producto)
-
-        INNER JOIN categoria cat on cat.id = p.id_categoria
-        INNER JOIN unidad_medida um_base ON um_base.id = p.id_unidad_medida_base
+        LEFT JOIN producto p ON p.id = lp.id_producto
+        LEFT JOIN unidad_medida um_base ON um_base.id = p.id_unidad_medida_base
         LEFT JOIN unidad_medida um_lote ON um_lote.id = lp.id_unidad_medida
         WHERE
-            k.id_almacen = :id_almacen AND
-            MONTH(k.created_at) = :mes AND
-            YEAR(k.created_at) = :yearcito
-        ORDER BY k.created_at DESC
+            k.id_almacen = :id_almacen
         ';
 
-        return DB::select($sql, [
-            'id_almacen' => $id_almacen,
-            'mes' => $mes,
-            'yearcito' => $yearcito
-        ]);
+        $params = ['id_almacen' => $id_almacen];
+
+        if ($mes !== null && $yearcito !== null) {
+            $sql .= ' AND MONTH(k.created_at) = :mes AND YEAR(k.created_at) = :yearcito';
+            $params['mes'] = $mes;
+            $params['yearcito'] = $yearcito;
+        }
+
+        $sql .= ' ORDER BY k.created_at DESC';
+
+        return DB::select($sql, $params);
     }
 }

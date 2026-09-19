@@ -20,8 +20,7 @@ class UnidadesMedidaData
         SELECT
             id AS id_unidad_medida,
             nombre,
-            abreviatura,
-            es_universal
+            abreviatura
         FROM unidad_medida
         WHERE 1 = 1
         ';

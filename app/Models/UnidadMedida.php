@@ -11,6 +11,5 @@ class UnidadMedida extends Model
     protected $fillable = [
         'nombre',
         'abreviatura',
-        'es_universal' // cuando son unidades de medida con magnitud medible
     ];
 }

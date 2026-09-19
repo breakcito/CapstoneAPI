@@ -56,14 +56,11 @@ class LotesController extends Controller
             id_producto: (int) $request->id_producto,
             id_unidad_medida: (int) $request->id_unidad_medida,
             id_almacen: (int) $request->id_almacen,
-            descripcion: $request->descripcion ?? null,
             stock_inicial: (float) $request->stock_inicial,
             contenido_por_presentacion: (float) $request->contenido_por_presentacion,
             fecha_hora_ingreso: $request->fecha_hora_ingreso,
             fecha_vencimiento: $request->fecha_vencimiento,
-            // Nuevos
-            serie_factura_compra: $request->serie_factura_compra ?? null,
-            numero_factura_compra: $request->numero_factura_compra ?? null,
+            comprobante_compra: $request->comprobante_compra ?? null,
             costo_por_unidad: $request->has('costo_por_unidad') && $request->costo_por_unidad !== null ? (float) $request->costo_por_unidad : null
         );
 
@@ -94,59 +91,27 @@ class LotesController extends Controller
 
         return response()->json($result);
     }
-    public function get_info_to_tickets(Request $request): JsonResponse
-    {
-        $ids_lotes = $request->query('ids');
-
-        if (!$ids_lotes) {
-            return response()->json(ApiResponse::error('Los IDs de lotes son requeridos'), 400);
-        }
-
-        // Convertir string "1,2,3" a array [1, 2, 3] si es necesario
-        $ids_array = is_array($ids_lotes) ? $ids_lotes : explode(',', $ids_lotes);
-        $ids_array = array_map('intval', $ids_array);
-
-        $result = LotesService::get_info_to_tickets($ids_array);
-
-        return response()->json($result);
-    }
 
     /**
      * Actualizar campos administrativos de un lote.
-     * El stock se ajusta por el endpoint de Corrección de Inventario (Kardex inmutable).
-     * El estado se gestiona por eliminar_lote (soft-delete) — no se expone aquí.
-     * La fecha de vencimiento solo se setea al registrar el lote.
      */
     public function actualizar_lote(Request $request, int $id_lote): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'descripcion' => 'nullable|string|max:1000',
-            'serie_factura_compra' => 'nullable|string|max:64',
-            'numero_factura_compra' => 'nullable|string|max:64',
-            'fecha_hora_ingreso' => 'required|date',
-        ], [
-            'fecha_hora_ingreso.required' => 'La fecha de ingreso es requerida',
-            'fecha_hora_ingreso.date' => 'La fecha de ingreso no es válida',
+            'comprobante_compra' => 'nullable|string|max:64',
+            'fecha_hora_ingreso' => 'nullable|date',
+            'costo_por_unidad' => 'nullable|numeric|min:0',
         ]);
 
         if ($validator->fails()) {
             return response()->json(ApiResponse::error($validator->errors()->first()));
         }
 
-        $authUser = $request->attributes->get('auth_user');
-        $idEmpleado = is_object($authUser) && isset($authUser->id_empleado) ? (int) $authUser->id_empleado : null;
-        $nombreEmpleado = is_object($authUser)
-            ? trim(($authUser->nombre ?? '') . ' ' . ($authUser->apellido ?? '')) ?: null
-            : null;
-
         $result = LotesService::actualizar_lote(
             id_lote: $id_lote,
-            descripcion: (string) ($request->input('descripcion') ?? ''),
-            serie_factura_compra: $this->emptyToNull($request->input('serie_factura_compra')),
-            numero_factura_compra: $this->emptyToNull($request->input('numero_factura_compra')),
-            fecha_hora_ingreso: (string) $request->input('fecha_hora_ingreso'),
-            id_empleado: $idEmpleado,
-            nombre_empleado: $nombreEmpleado,
+            comprobante_compra: $this->emptyToNull($request->input('comprobante_compra')),
+            fecha_hora_ingreso: $request->input('fecha_hora_ingreso'),
+            costo_por_unidad: $request->has('costo_por_unidad') && $request->input('costo_por_unidad') !== null ? (float) $request->input('costo_por_unidad') : null
         );
 
         return response()->json($result);
@@ -157,17 +122,7 @@ class LotesController extends Controller
      */
     public function eliminar_lote(Request $request, int $id_lote): JsonResponse
     {
-        $authUser = $request->attributes->get('auth_user');
-        $idEmpleado = is_object($authUser) && isset($authUser->id_empleado) ? (int) $authUser->id_empleado : null;
-        $nombreEmpleado = is_object($authUser)
-            ? trim(($authUser->nombre ?? '') . ' ' . ($authUser->apellido ?? '')) ?: null
-            : null;
-
-        $result = LotesService::eliminar_lote(
-            id_lote: $id_lote,
-            id_empleado: $idEmpleado,
-            nombre_empleado: $nombreEmpleado,
-        );
+        $result = LotesService::eliminar_lote(id_lote: $id_lote);
 
         return response()->json($result);
     }

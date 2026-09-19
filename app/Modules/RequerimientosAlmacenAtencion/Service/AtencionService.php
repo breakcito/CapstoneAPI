@@ -2,9 +2,7 @@
 
 namespace App\Modules\RequerimientosAlmacenAtencion\Service;
 
-use App\Shared\Enums\_Generic\Premura;
 use App\Shared\Enums\RequerimientoAlmacen\EstadoRequerimientoDetalle;
-use App\Shared\Enums\RequerimientoAlmacen\EstadoRequerimientoDetalleLog;
 use App\Shared\Responses\ApiResponse;
 use App\Models\RequerimientoAlmacenDetalle;
 use App\Modules\RequerimientosAlmacenAtencion\Data\RequerimientosData;
@@ -50,20 +48,15 @@ class AtencionService
      * ]
      */
     public static function registrar_requerimiento(
-        ?int $id_empleado_solicitante,
         ?int $id_contratista_solicitante,
         int $id_empleado_registro,
-        ?int $id_labor,
         int $id_almacen_destino,
-        bool $es_auditable,
-        Premura $premura,
         array $detalles,
-        ?string $fecha_entrega_requerida = null,
         ?string $fecha_solicitud = null,
         ?string $observacion = null,
         ?array $evidencias = null
     ) {
-        return DB::transaction(function () use ($id_empleado_solicitante, $id_contratista_solicitante, $id_empleado_registro, $id_labor, $id_almacen_destino, $es_auditable, $premura, $observacion, $fecha_entrega_requerida, $fecha_solicitud, $detalles, $evidencias) {
+        return DB::transaction(function () use ($id_contratista_solicitante, $id_empleado_registro, $id_almacen_destino, $observacion, $fecha_solicitud, $detalles, $evidencias) {
             // 1. Generar correlativo
             $correlativo = RequerimientosData::get_nuevo_correlativo();
 
@@ -75,17 +68,12 @@ class AtencionService
 
             // 3. Crear cabecera
             $id_requerimiento = RequerimientosData::crear_requerimiento(
-                id_empleado_solicitante: $id_empleado_solicitante,
                 id_contratista_solicitante: $id_contratista_solicitante,
                 id_empleado_registro: $id_empleado_registro,
-                id_labor: $id_labor,
                 id_almacen_destino: $id_almacen_destino,
                 correlativo: $correlativo['correlativo'],
                 numero_correlativo: $correlativo['numero_correlativo'],
-                es_auditable: $es_auditable,
-                premura: $premura,
                 observacion: $observacion,
-                fecha_entrega_requerida: $fecha_entrega_requerida,
                 fecha_solicitud: $fecha_solicitud,
                 evidencias: $evidenciasFinal
             );
@@ -113,21 +101,17 @@ class AtencionService
 
                 $id_detalle = RequerimientosDetalleData::crear_detalle(
                     $id_requerimiento,
-                    $detalle['id_producto'],
-                    $detalle['id_unidad_medida'],
+                    (int) $detalle['id_producto'],
+                    (int) $detalle['id_unidad_medida'],
                     $cantidad,
                     $contenido,
                     $cantidad_base,
                     $detalle['comentario'] ?? null,
-                    (bool) ($detalle['para_mantenimiento'] ?? false),
-                    $detalle['id_activo_fijo_destino'] ?? null,
                     con_magnitud: $conMagnitud,
                     cantidad_items: $cantidadItems > 0 ? $cantidadItems : null,
                     valor_magnitud: isset($detalle['valor_magnitud']) ? (float) $detalle['valor_magnitud'] : null,
                     valor_magnitud_base: $valorMagnitudBase > 0 ? $valorMagnitudBase : null,
                 );
-
-                RequerimientosDetalleData::registrar_trazabilidad($id_detalle, $id_empleado_registro);
             }
 
             // 5. Obtener resumen para el front
@@ -178,14 +162,6 @@ class AtencionService
                     $requerimiento = RequerimientosDetalleData::get_id_requerimiento_by_detalle((int) $id_detalle);
                     RequerimientosData::update_requerimiento_estado((int) $requerimiento->id_requerimiento_almacen, EstadoRequerimiento::EnDespacho->value);
                 }
-
-                $descripcion = $estadoEnum->getGlosa();
-                RequerimientosDetalleData::insert_detalle_log(
-                    (int) $id_detalle,
-                    $id_empleado,
-                    $comentario_decision ?? $descripcion,
-                    EstadoRequerimientoDetalleLog::from($nuevo_estado)
-                );
             }
 
             $mensaje = count($ids_detalles) > 1
@@ -390,8 +366,6 @@ class AtencionService
                     $contenido,
                     $cantidadBaseCalculada,
                     $det['comentario'] ?? null,
-                    $paraMantenimiento,
-                    $idActivoDestino,
                     con_magnitud: $conMagnitud,
                     cantidad_items: $cantidadItems > 0 ? $cantidadItems : null,
                     valor_magnitud: isset($det['valor_magnitud']) ? (float) $det['valor_magnitud'] : null,

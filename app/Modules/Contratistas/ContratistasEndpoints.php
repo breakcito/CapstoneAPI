@@ -9,7 +9,6 @@ Route::middleware('auth.jwt.custom')->group(function () {
         Route::post('/', 'crear_contratista');
         Route::put('/{id}', 'actualizar_contratista');
         Route::delete('/{id}', 'eliminar_contratista');
-        Route::post('{id}/foto', 'actualizar_foto');
-        Route::post('{id}/labores', 'asignar_labores');
+        Route::post('/foto/{id}', 'actualizar_foto');
     });
 });

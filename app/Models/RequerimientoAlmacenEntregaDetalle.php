@@ -23,6 +23,6 @@ class RequerimientoAlmacenEntregaDetalle extends Model
         'cantidad_lote',
         'cantidad_requerimiento',
         //
-        'costo',
+        'costo', // segun la cantidad entregada y el costo del lote se calcula cuanto vale esta entrega:  cantidad_lote * costo_por_unidad del lote
     ];
 }

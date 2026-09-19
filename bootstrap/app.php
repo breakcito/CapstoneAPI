@@ -27,7 +27,6 @@ return Application::configure(basePath: dirname(__DIR__))
                 require base_path('app/Modules/Roles/RolesEndpoints.php');
                 require base_path('app/Modules/Cuentas/CuentasEndpoints.php');
                 require base_path('app/Modules/Perfil/PerfilEndpoints.php');
-                require base_path('app/Modules/Proveedores/ProveedoresEndpoints.php');
                 require base_path('app/Modules/System/SystemEndpoints.php');
             });
         },
