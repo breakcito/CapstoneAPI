@@ -23,13 +23,10 @@ class CuentasData
                 r.nombre as nombre_rol,
                 e.nombre as nombre_empleado,
                 e.apellido as apellido_empleado,
-                IFNULL(e.id_empresa, ct.id_empresa) as id_empresa_pertenece,
-                e.url_foto,
-                emp.razon_social as empresa_pertenece
+                e.dni,
+                e.url_foto
             FROM usuario u
             INNER JOIN empleado e ON e.id = u.id_empleado
-            LEFT JOIN contrato_trabajo ct ON ct.id = e.id_contrato_vigente
-            LEFT JOIN empresa emp ON emp.id = IFNULL(e.id_empresa, ct.id_empresa)
             INNER JOIN rol r ON r.id = u.id_rol
             WHERE 1=1
         ";

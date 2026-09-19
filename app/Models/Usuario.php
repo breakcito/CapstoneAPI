@@ -45,11 +45,8 @@ class Usuario extends Model implements AuthenticatableContract, JWTSubject
             emp.nombre,
             emp.apellido,
             emp.dni,
-            emp.ruc,
-            emp.carnet_extranjeria,
-            emp.pasaporte,
-            emp.fecha_nacimiento,
             emp.url_foto,
+            emp.es_contratista,
             emp.estado as estado_empleado,
             usu.estado as estado_usuario
         FROM

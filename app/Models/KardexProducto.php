@@ -29,7 +29,7 @@ class KardexProducto extends Model
         'stock_resultante',
         'stock_resultante_base', // cuanto hay ahora en base a la unidad de medida del producto
         //
-        'costo', // cuanto costaba en promedio el producto del lote en el momento del movimiento
+        'costo', // cuanto costo este ingreso/salida: cantidad movimiento * costo_por_unidad del lote
         //
         'created_at', // cuando se registro el movimiento
     ];

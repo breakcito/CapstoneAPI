@@ -112,7 +112,7 @@ class EntregasData
             'observacion' => $observacion,
             'evidencias' => $evidencias ? json_encode($evidencias) : null,
             'created_at' => now(),
-            'estado' => EstadoRequerimientoEntrega::SinConsumir->value
+            'estado' => EstadoRequerimientoEntrega::Entregado->value
         ]);
     }
 }

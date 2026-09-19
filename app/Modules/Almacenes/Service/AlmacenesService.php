@@ -9,29 +9,19 @@ class AlmacenesService
 {
     /**
      * Listar almacenes.
-     *
-     * @param ?bool $para_carbon Si se pasa true|false filtra por ese tipo.
-     *   Si es null, NO se aplica filtro y se devuelven tanto logistica como
-     *   carbon. La vista /almacenes con tabs pasa true|false segun el tab.
      */
-    public static function get_almacenes(?bool $para_carbon = null)
+    public static function get_almacenes()
     {
-        $almacenes = AlmacenesData::get_almacenes(para_carbon: $para_carbon);
+        $almacenes = AlmacenesData::get_almacenes();
 
         return ApiResponse::success($almacenes);
     }
 
     /**
-     * Crear un almacen (logistica o carbon segun $para_carbon).
-     *
-     * La geografia (departamento/provincia/distrito) es opcional; el caller
-     * debe encargarse de pasar los ids en cascada coherente.
+     * Crear un almacen
      */
     public static function crear_almacen(
         string $nombre,
-        bool $es_principal,
-        bool $para_carbon = false,
-        ?string $descripcion = null,
         ?int $id_departamento = null,
         ?int $id_provincia = null,
         ?int $id_distrito = null,
@@ -43,9 +33,6 @@ class AlmacenesService
 
         $id_almacen = AlmacenesData::crear_almacen(
             nombre: $nombre,
-            descripcion: $descripcion,
-            es_principal: $es_principal,
-            para_carbon: $para_carbon,
             id_departamento: $id_departamento,
             id_provincia: $id_provincia,
             id_distrito: $id_distrito,
@@ -54,5 +41,44 @@ class AlmacenesService
         $nuevoAlmacen = AlmacenesData::get_almacen_by_id($id_almacen);
 
         return ApiResponse::success($nuevoAlmacen, 'Almacén creado correctamente');
+    }
+
+    /**
+     * Actualizar un almacén
+     */
+    public static function actualizar_almacen(
+        int $id_almacen,
+        string $nombre,
+        ?int $id_departamento = null,
+        ?int $id_provincia = null,
+        ?int $id_distrito = null,
+        ?string $direccion = null
+    ) {
+        if (AlmacenesData::verificar_nombre_duplicado($nombre, $id_almacen)) {
+            return ApiResponse::error('Ya existe otro almacén con este nombre.');
+        }
+
+        AlmacenesData::actualizar_almacen(
+            id_almacen: $id_almacen,
+            nombre: $nombre,
+            id_departamento: $id_departamento,
+            id_provincia: $id_provincia,
+            id_distrito: $id_distrito,
+            direccion: $direccion
+        );
+
+        $almacenActualizado = AlmacenesData::get_almacen_by_id($id_almacen);
+
+        return ApiResponse::success($almacenActualizado, 'Almacén actualizado correctamente');
+    }
+
+    /**
+     * Eliminar (inactivar) un almacén
+     */
+    public static function eliminar_almacen(int $id_almacen)
+    {
+        AlmacenesData::eliminar_almacen($id_almacen);
+
+        return ApiResponse::success(null, 'Almacén inactivado correctamente');
     }
 }

@@ -27,9 +27,6 @@ Route::middleware('auth.jwt.custom')->group(function () {
             Route::get('/unidades-medida', 'get_unidades_medida');
             Route::post('/unidades-medida', 'crear_unidad_medida');
 
-            // empresas
-            Route::get('/empresas', 'get_empresas');
-
             // productos
             Route::get('/productos', 'get_productos');
             Route::post('/productos', 'crear_producto');
@@ -37,9 +34,6 @@ Route::middleware('auth.jwt.custom')->group(function () {
             // contratistas
             Route::get('/contratistas', 'get_contratistas');
             Route::post('/contratistas', 'crear_contratista');
-
-            // lotes de mineral
-            Route::get('/lotes-mineral', 'get_lotes_mineral');
 
             // ubicación geográfica del Perú (catálogos de solo lectura)
             Route::get('/departamentos', 'get_departamentos');

@@ -25,8 +25,8 @@ class LoteProducto extends Model
         'contenido_por_presentacion', // cuantas unidades del producto hay en una unidad del lote: Ej. 12KG x Saco
         'stock_actual_base', // segun la unidad base del producto
         //
-        'costo_por_unidad', // Cuanto costó realmente una unidad del lote en la orden de compra de donde provino
-        'costo_por_unidad_base', // Cuanto costó realmente una unidad base del producto
+        'costo_por_unidad', // Cuanto costó realmente una unidad del lote en la orden de compra de donde provino, esto lo pone el usuario
+        'costo_por_unidad_base', // Cuanto costó realmente una unidad base del producto, esto se calcula automaticamente segun el contenido por presentacion
         //
         'fecha_hora_ingreso',
         'fecha_vencimiento',

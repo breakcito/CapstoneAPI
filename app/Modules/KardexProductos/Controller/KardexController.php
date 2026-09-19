@@ -13,14 +13,14 @@ class KardexController extends Controller
     public function get_resumen_kardex(Request $request): JsonResponse
     {
         $id_almacen = $request->query('id_almacen');
-        $mes = $request->query('mes');
-        $yearcito = $request->query('yearcito');
+        $mes = $request->query('mes') ? (int) $request->query('mes') : null;
+        $yearcito = $request->query('yearcito') ? (int) $request->query('yearcito') : null;
 
-        if (!$id_almacen || !$mes || !$yearcito) {
-            return response()->json(ApiResponse::error('Los parametros de almacen, mes y año son requeridos'));
+        if (!$id_almacen) {
+            return response()->json(ApiResponse::error('El almacén es requerido'));
         }
 
-        $result = KardexService::get_resumen_kardex((int) $id_almacen, (int) $mes, (int) $yearcito);
+        $result = KardexService::get_resumen_kardex((int) $id_almacen, $mes, $yearcito);
 
         return response()->json($result);
     }

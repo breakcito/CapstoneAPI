@@ -29,44 +29,36 @@ class LotesService
         int $id_producto,
         int $id_unidad_medida,
         int $id_almacen,
-        ?string $descripcion,
         float $stock_inicial,
         float $contenido_por_presentacion,
-        string $fecha_hora_ingreso,
-        ?string $fecha_vencimiento,
-        // Nuevos
-        ?string $serie_factura_compra = null,
-        ?string $numero_factura_compra = null,
+        ?string $fecha_hora_ingreso = null,
+        ?string $fecha_vencimiento = null,
+        ?string $comprobante_compra = null,
         ?float $costo_por_unidad = null
     ) {
         $new_lote_response = LotesProductosService::crear_lote(
             id_producto: $id_producto,
             id_unidad_medida: $id_unidad_medida,
             id_almacen: $id_almacen,
-            id_origen: null,
-            //
-            tabla_origen: null,
-            //
             contenido_por_presentacion: $contenido_por_presentacion,
             stock_inicial: $stock_inicial,
-            //
             fecha_hora_ingreso: $fecha_hora_ingreso,
-            descripcion: $descripcion,
             fecha_vencimiento: $fecha_vencimiento,
-            // Nuevos
-            serie_factura_compra: $serie_factura_compra,
-            numero_factura_compra: $numero_factura_compra,
+            comprobante_compra: $comprobante_compra,
             costo_por_unidad: $costo_por_unidad
         );
 
-        $id_lote = $new_lote_response['data'];
-        return ApiResponse::success(LotesData::get_lote_by_id(id_lote: $id_lote), 'Lote registrado correctamente');
+        $id_lote = $new_lote_response['data']['id_lote'] ?? null;
+        return ApiResponse::success(
+            $id_lote ? LotesData::get_lote_by_id(id_lote: (int) $id_lote) : null,
+            'Lote registrado correctamente'
+        );
     }
 
     public static function ajustar_stock(int $id_lote, float $nuevo_stock_base, ?string $motivo = null)
     {
         return DB::transaction(function () use ($id_lote, $nuevo_stock_base, $motivo) {
-            $lote = LotesProductosData::get_lote_dinamico_by_id(id_lote: $id_lote, columnas: ['stock_actual_base']);
+            $lote = LotesProductosData::get_lote_dinamico_by_id(id_lote: $id_lote, columnas: ['id_almacen', 'stock_actual_base', 'contenido_por_presentacion', 'stock_actual', 'costo_por_unidad']);
             if (!$lote) {
                 return ApiResponse::error('Lote no encontrado');
             }
@@ -79,14 +71,31 @@ class LotesService
             $diferencia_base = $nuevo_stock_base - $stock_anterior_base;
             $tipo_movimiento = $diferencia_base > 0 ? KardexTipoMovimiento::Ingreso : KardexTipoMovimiento::Salida;
 
-            LotesProductosService::update_stock(
+            $contenido = (float) ($lote['contenido_por_presentacion'] ?? 1);
+            $nuevo_stock = $contenido > 0 ? round($nuevo_stock_base / $contenido, 4) : $nuevo_stock_base;
+            $cantidad_movimiento = abs($nuevo_stock - (float)$lote['stock_actual']);
+
+            LotesProductosData::update_stock(
                 id_lote: $id_lote,
-                id_origen: null,
-                tabla_origen: null,
-                tipo_origen: KardexOrigenMovimiento::AjusteStock,
+                nuevo_stock: $nuevo_stock,
+                nuevo_stock_base: $nuevo_stock_base
+            );
+
+            $costo_unitario = (float) ($lote['costo_por_unidad'] ?? 0);
+
+            \App\Services\KardexProductosService::registrar_kardex(
                 tipo_movimiento: $tipo_movimiento,
+                tipo_origen: KardexOrigenMovimiento::AjusteStock->value,
+                descripcion: $motivo ?? 'Ajuste de stock manual',
+                cantidad_movimiento: $cantidad_movimiento,
                 cantidad_movimiento_base: abs($diferencia_base),
-                descripcion: $motivo
+                nuevo_stock: $nuevo_stock,
+                nuevo_stock_base: $nuevo_stock_base,
+                id_lote: $id_lote,
+                id_almacen: (int) $lote['id_almacen'],
+                stock_anterior: (float) $lote['stock_actual'],
+                stock_anterior_base: $stock_anterior_base,
+                costo: $cantidad_movimiento * $costo_unitario
             );
 
             return ApiResponse::success(LotesData::get_lote_by_id(id_lote: $id_lote), 'Stock del lote ajustado correctamente');
@@ -94,27 +103,13 @@ class LotesService
     }
 
     /**
-     * Obtener información de lotes para impresión de tickets.
-     */
-    public static function get_info_to_tickets(array $ids_lotes)
-    {
-        $info = LotesProductosData::get_info_to_ticket(ids_lotes: $ids_lotes);
-        return ApiResponse::success($info);
-    }
-
-    /**
-     * Actualizar campos administrativos de un lote (NO stock/identificadores/estado/fecha_vencimiento).
-     * Si se recibe id_empleado + nombre_empleado se calcula diff y se apendea
-     * a cambios_log para trazabilidad.
+     * Actualizar campos de un lote.
      */
     public static function actualizar_lote(
         int $id_lote,
-        string $descripcion,
-        ?string $serie_factura_compra,
-        ?string $numero_factura_compra,
+        ?string $comprobante_compra,
         ?string $fecha_hora_ingreso,
-        ?int $id_empleado = null,
-        ?string $nombre_empleado = null
+        ?float $costo_por_unidad = null
     ) {
         $existe = LotesData::get_resumen_lotes(id_lote: $id_lote);
         if (!$existe) {
@@ -123,43 +118,31 @@ class LotesService
 
         LotesData::actualizar_lote(
             id_lote: $id_lote,
-            descripcion: $descripcion,
-            serie_factura_compra: $serie_factura_compra,
-            numero_factura_compra: $numero_factura_compra,
+            comprobante_compra: $comprobante_compra,
             fecha_hora_ingreso: $fecha_hora_ingreso,
-            id_empleado: $id_empleado,
-            nombre_empleado: $nombre_empleado,
+            costo_por_unidad: $costo_por_unidad
         );
 
         return ApiResponse::success(
             LotesData::get_resumen_lotes(id_lote: $id_lote),
-            'Lote actualizado correctamente',
+            'Lote actualizado correctamente'
         );
     }
 
     /**
-     * Desactivar (soft delete) un lote. Cambia estado a Inactivo y registra
-     * la accion en cambios_log para trazabilidad.
+     * Desactivar (soft delete) un lote.
      */
-    public static function eliminar_lote(
-        int $id_lote,
-        ?int $id_empleado = null,
-        ?string $nombre_empleado = null
-    ) {
+    public static function eliminar_lote(int $id_lote) {
         $existe = LotesData::get_resumen_lotes(id_lote: $id_lote);
         if (!$existe) {
             return ApiResponse::error('El lote que intenta eliminar no existe.');
         }
 
-        LotesData::eliminar_lote(
-            id_lote: $id_lote,
-            id_empleado: $id_empleado,
-            nombre_empleado: $nombre_empleado,
-        );
+        LotesData::eliminar_lote(id_lote: $id_lote);
 
         return ApiResponse::success(
             LotesData::get_resumen_lotes(id_lote: $id_lote),
-            'Lote eliminado correctamente',
+            'Lote eliminado correctamente'
         );
     }
 }

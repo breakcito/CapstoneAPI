@@ -3,9 +3,7 @@
 namespace App\Modules\RequerimientosAlmacenAtencion\Data;
 
 use App\Models\RequerimientoAlmacenDetalle;
-use App\Models\RequerimientoAlmacenDetalleLog;
 use App\Shared\Enums\RequerimientoAlmacen\EstadoRequerimientoDetalle;
-use App\Shared\Enums\RequerimientoAlmacen\EstadoRequerimientoDetalleLog;
 use Illuminate\Support\Facades\DB;
 
 class RequerimientosDetalleData
@@ -26,7 +24,6 @@ class RequerimientosDetalleData
     {
         return RequerimientoAlmacenDetalle::where('id', $id_detalle)->first([
             'cantidad_solicitada_base',
-            'cantidad_entregada_base',
         ]);
     }
 
@@ -35,9 +32,7 @@ class RequerimientosDetalleData
      */
     public static function get_detalle_logs(int $id_detalle)
     {
-        return RequerimientoAlmacenDetalleLog::get_logs(
-            id_requerimiento_detalle: $id_detalle
-        );
+        return [];
     }
 
     /**
@@ -47,14 +42,9 @@ class RequerimientosDetalleData
         int $id_detalle,
         int $id_empleado,
         string $descripcion,
-        EstadoRequerimientoDetalleLog $estado
+        string $estado
     ) {
-        return RequerimientoAlmacenDetalleLog::crear_log(
-            id_requerimiento_detalle: $id_detalle,
-            id_empleado: $id_empleado,
-            descripcion: $descripcion,
-            estado: $estado
-        );
+        return null;
     }
 
     /**
@@ -199,8 +189,6 @@ class RequerimientosDetalleData
         float $contenido,
         float $cantidad_base,
         ?string $comentario = null,
-        bool $para_mantenimiento = false,
-        ?int $id_activo_fijo_destino = null,
         bool $con_magnitud = false,
         ?float $cantidad_items = null,
         ?float $valor_magnitud = null,
@@ -213,31 +201,19 @@ class RequerimientosDetalleData
             'cantidad_solicitada' => $cantidad,
             'contenido_por_presentacion' => $contenido,
             'cantidad_solicitada_base' => $cantidad_base,
-            'cantidad_entregada' => 0,
-            'cantidad_entregada_base' => 0,
             'comentario' => $comentario,
-            'para_mantenimiento' => $para_mantenimiento,
-            'id_activo_fijo_destino' => $id_activo_fijo_destino,
             'con_magnitud' => $con_magnitud ? 1 : 0,
-            'cantidad_items' => $cantidad_items,
-            'valor_magnitud' => $valor_magnitud,
-            'valor_magnitud_base' => $valor_magnitud_base,
-            'estado' => EstadoRequerimientoDetalle::EsperandoAprobacion->value,
+            'cantidad_items' => $cantidad_items ?? 0,
+            'valor_magnitud' => $valor_magnitud ?? 0,
+            'valor_magnitud_base' => $valor_magnitud_base ?? 0,
+            'estado' => EstadoRequerimientoDetalle::Pendiente->value,
         ]);
     }
 
-    /**
-     * Registra en la trazbilidad del detalle
-     */
     public static function registrar_trazabilidad(
         int $id_detalle,
         int $id_empleado_registro
     ) {
-        return RequerimientoAlmacenDetalleLog::crear_log(
-            id_requerimiento_detalle: $id_detalle,
-            id_empleado: $id_empleado_registro,
-            descripcion: EstadoRequerimientoDetalle::EsperandoAprobacion->getGlosa(),
-            estado: EstadoRequerimientoDetalleLog::EsperandoAprobacion
-        );
+        return null;
     }
 }
