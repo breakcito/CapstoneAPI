@@ -23,15 +23,11 @@ class AtencionController extends Controller
      */
     public function get_requerimientos(Request $request): JsonResponse
     {
-        $id_almacen = $request->input('id_almacen');
+        $id_almacen = $request->input('id_almacen') ? (int) $request->input('id_almacen') : null;
         $mes = $request->input('mes');
         $yearcito = $request->input('yearcito');
 
-        if (!$id_almacen || !$mes || !$yearcito) {
-            return response()->json(ApiResponse::error('id_almacen, mes y yearcito son requeridos'), 400);
-        }
-
-        $result = AtencionService::get_requerimientos((int) $id_almacen, $mes, $yearcito);
+        $result = AtencionService::get_requerimientos($id_almacen, $mes, $yearcito);
 
         return response()->json($result);
     }

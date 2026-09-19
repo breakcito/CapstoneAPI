@@ -35,9 +35,7 @@ class LotesController extends Controller
             'contenido_por_presentacion' => 'required|numeric|min:0',
             'fecha_hora_ingreso' => 'required|date',
             'fecha_vencimiento' => 'nullable|date|after_or_equal:fecha_hora_ingreso',
-            // Nuevos
-            'serie_factura_compra' => 'nullable|string',
-            'numero_factura_compra' => 'nullable|string',
+            'comprobante_compra' => 'nullable|string|max:128',
             'costo_por_unidad' => 'nullable|numeric|min:0',
         ], [
             'id_producto.required' => 'El producto es requerido',
