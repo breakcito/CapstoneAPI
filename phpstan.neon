@@ -1,0 +1,27 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+
+    paths:
+        - app/
+        - bootstrap/
+        - config/
+        - routes/
+
+    # Level 9 is the highest level
+    level: 0
+
+    # Manejo de tipos en PHPDoc
+    treatPhpDocTypesAsCertain: false
+
+    # Ignorar errores específicos de Laravel que a veces son falsos positivos
+    ignoreErrors: []
+
+    # Excluir rutas innecesarias
+    excludePaths:
+        - bootstrap/cache/*
+        - storage/*
+        - vendor/*
+
+# Comando de ejecución de análisis: ./vendor/bin/phpstan
