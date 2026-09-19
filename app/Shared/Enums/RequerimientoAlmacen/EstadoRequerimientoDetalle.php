@@ -4,12 +4,9 @@ namespace App\Shared\Enums\RequerimientoAlmacen;
 
 enum EstadoRequerimientoDetalle: string
 {
-    case EsperandoAprobacion = "Esperando Aprobación";
+    case Pendiente = "Pendiente";
     case Rechazado = "Rechazado";
     case Aprobado = "Aprobado";
-    case ConsultaLogistica = "Consultando a Logística";
-    case RechazadoLogistica = "Rechazado por Logística";
-    case AprobadoLogistica = "Aprobado por Logística";
     case EnDespacho = "En Despacho";
     case Cerrado = "Cerrado";
     case Completado = "Completado";
@@ -17,12 +14,9 @@ enum EstadoRequerimientoDetalle: string
     public function getGlosa(?string $dinamico = null): string
     {
         return match ($this) {
-            self::EsperandoAprobacion => "Esperando Aprobación",
+            self::Pendiente => "Pendiente",
             self::Rechazado => "Rechazado",
             self::Aprobado => "Aprobado",
-            self::ConsultaLogistica => "Consultando a Logística",
-            self::RechazadoLogistica => "Rechazado por Logística",
-            self::AprobadoLogistica => "Aprobado por Logística",
             self::EnDespacho => "En Despacho",
             self::Cerrado => "Cerrado",
             self::Completado => "Completado",

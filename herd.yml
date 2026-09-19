@@ -1,11 +1,11 @@
 # Laravel Herd configuration reference.
 #
 # Herd uses this file as documentation; the actual site is created via
-# `herd link api-local-blacksilver` (see README.md).
+# `herd link api-local-capstone` (see README.md).
 #
 # This file documents:
-#   - The hostname shared by the team: api-local-blacksilver.test
+#   - The hostname shared by the team: api-local-capstone.test
 #   - The PHP version that satisfies composer.json (^8.2)
 
-name: api-local-blacksilver
-php: '8.4'
+name: api-local-capstone
+php: "8.4"
