@@ -22,6 +22,24 @@ class CuentasController extends Controller
     }
 
     /**
+     * Listar roles disponibles
+     */
+    public function get_roles_disponibles(): JsonResponse
+    {
+        $result = \App\Services\RolesService::get_roles();
+        return response()->json($result);
+    }
+
+    /**
+     * Listar empleados sin cuenta
+     */
+    public function get_empleados_sin_cuenta(): JsonResponse
+    {
+        $result = EmpleadosService::get_empleados(con_cuenta: false);
+        return response()->json($result);
+    }
+
+    /**
      * Registrar una nueva cuenta de usuario
      */
     public function crear_cuenta(Request $request): JsonResponse
@@ -81,7 +99,7 @@ class CuentasController extends Controller
             id_rol: (int) $v['id_rol'],
             username: (string) $v['username'],
             password: isset($v['password']) ? (string) $v['password'] : null,
-            estado: isset($v['estado']) ? (string) $v['estado'] : null
+            estado: isset($v['estado']) ? \App\Shared\Enums\_Generic\EstadoBase::tryFrom((string) $v['estado']) : null
         );
         return response()->json($result);
     }

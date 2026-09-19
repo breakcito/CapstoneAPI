@@ -17,7 +17,6 @@ API del ERP Cupper & Hannia para la industria minera. Digitaliza y conecta opera
 
 - PHP 8.2 / Laravel 12
 - JWT: `php-open-source-saver/jwt-auth`
-- WebSockets: Laravel Reverb (eventos en tiempo real)
 - Dev local: Laravel Octane + FrankenPHP
 - DB: MySQL con SQL crudo (`DB::select`, `DB::insertGetId`) + Eloquent con métodos estáticos
 - Análisis estático: PHPStan (Larastan)
@@ -101,14 +100,11 @@ php artisan key:generate
 php artisan storage:link
 ```
 
-Diario (3 terminales):
+Diario:
 
 ```bash
-# T1 — API
+# Servir API
 php artisan serve
-
-# T2 — WebSockets
-php artisan reverb:start
 ```
 
 Si algo no se refleja después de editar, o cambios en `composer.json`, limpiar todos los caches con un solo comando:
@@ -128,14 +124,10 @@ Setup inicial (una vez por máquina):
 herd link api-local-capstone
 ```
 
-Diario (1 terminal):
+Diario:
 
 ```bash
-# T1 — Sitio Laravel (nginx + php-fpm vía Herd)
 herd start
-
-# T1 — WebSockets (Reverb corre como proceso PHP normal)
-php artisan reverb:start
 ```
 
 ## Reglas para IA

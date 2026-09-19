@@ -22,7 +22,7 @@ class AtencionService
     /**
      * Obtiene los requerimientos por almacén y periodo
      */
-    public static function get_requerimientos(int $id_almacen, string $mes, string $yearcito)
+    public static function get_requerimientos(?int $id_almacen = null, ?string $mes = null, ?string $yearcito = null)
     {
         $data = RequerimientosData::get_resumen_requerimientos($id_almacen, $mes, $yearcito);
 

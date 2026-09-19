@@ -32,6 +32,7 @@ class AlmacenesController extends Controller
             'id_provincia' => 'nullable|integer',
             'id_distrito' => 'nullable|integer',
             'direccion' => 'nullable|string|max:255',
+            'id_empleado_responsable' => 'nullable|integer|exists:empleado,id',
         ], [
             'nombre.required' => 'El nombre es obligatorio',
         ]);
@@ -48,6 +49,7 @@ class AlmacenesController extends Controller
             id_provincia: isset($v['id_provincia']) ? (int) $v['id_provincia'] : null,
             id_distrito: isset($v['id_distrito']) ? (int) $v['id_distrito'] : null,
             direccion: isset($v['direccion']) ? (string) $v['direccion'] : null,
+            id_empleado_responsable: isset($v['id_empleado_responsable']) ? (int) $v['id_empleado_responsable'] : null,
         );
 
         return response()->json($result);
