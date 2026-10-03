@@ -49,11 +49,39 @@ class RequerimientoAlmacenDetalle extends Model
             unib.abreviatura AS unidad_medida_base_abv,
             rad.contenido_por_presentacion, -- cuantas unidades base hay en una unidad del detalle del requerimiento
             rad.cantidad_solicitada_base,
-           (
+            -- Cantidad entregada SOLO de entregas ACTIVAS. Las entregas
+            -- anuladas se excluyen (JOIN por estado del entrega).
+            COALESCE((
                 SELECT SUM(entd.cantidad_base)
                 FROM requerimiento_almacen_entrega_detalle entd
+                INNER JOIN requerimiento_almacen_entrega rae
+                    ON rae.id = entd.id_requerimiento_almacen_entrega
                 WHERE entd.id_requerimiento_almacen_detalle = rad.id
-            ) as cantidad_entregada_base,
+                  AND rae.estado = :estado_entregado_1
+            ), 0) as cantidad_entregada_base,
+            -- Porcentaje de progreso (0-100). Se calcula solo contra
+            -- entregas ACTIVAS para que anular entregas devuelva el
+            -- contador a 0%.
+            CASE
+                WHEN rad.cantidad_solicitada_base IS NULL OR rad.cantidad_solicitada_base = 0
+                    THEN 0
+                ELSE LEAST(
+                    100,
+                    ROUND(
+                        (
+                            COALESCE((
+                                SELECT SUM(entd.cantidad_base)
+                                FROM requerimiento_almacen_entrega_detalle entd
+                                INNER JOIN requerimiento_almacen_entrega rae
+                                    ON rae.id = entd.id_requerimiento_almacen_entrega
+                                WHERE entd.id_requerimiento_almacen_detalle = rad.id
+                                  AND rae.estado = :estado_entregado_2
+                            ), 0) / rad.cantidad_solicitada_base
+                        ) * 100,
+                        2
+                    )
+                )
+            END as porcentaje_progreso,
             
             -- unidad del requerimiento y cantidades en base a esa unidad
             rad.id_unidad_medida as id_unidad_medida_req, 
@@ -98,7 +126,10 @@ class RequerimientoAlmacenDetalle extends Model
         WHERE 1=1
         ';
 
-        $params = [];
+        $params = [
+            'estado_entregado_1' => 'Entregado',
+            'estado_entregado_2' => 'Entregado',
+        ];
 
         if ($id_detalle !== null) {
             $sql .= ' AND rad.id = :id_detalle';

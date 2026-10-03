@@ -3,6 +3,7 @@
 namespace App\Modules\RequerimientosAlmacenAtencion\Service;
 
 use App\Shared\Enums\RequerimientoAlmacen\EstadoRequerimientoDetalle;
+use App\Shared\Helpers\EmpleadoHelper;
 use App\Shared\Responses\ApiResponse;
 use App\Models\RequerimientoAlmacenDetalle;
 use App\Modules\RequerimientosAlmacenAtencion\Data\RequerimientosData;
@@ -112,6 +113,24 @@ class AtencionService
                     valor_magnitud: isset($detalle['valor_magnitud']) ? (float) $detalle['valor_magnitud'] : null,
                     valor_magnitud_base: $valorMagnitudBase > 0 ? $valorMagnitudBase : null,
                 );
+
+                // Log de trazabilidad: el detalle se creo en estado
+                // Pendiente. Este es el primer evento del timeline.
+                // Incluimos el nombre del producto y del empleado para
+                // que el log sea legible en la UI de Seguimiento.
+                $producto_nombre = EmpleadoHelper::producto_nombre((int) $detalle['id_producto']);
+                $empleado_nombre = EmpleadoHelper::nombre_completo($id_empleado_registro);
+                RequerimientosDetalleData::insert_detalle_log(
+                    id_detalle: (int) $id_detalle,
+                    id_empleado: $id_empleado_registro,
+                    estado: EstadoRequerimientoDetalle::Pendiente->value,
+                    descripcion: sprintf(
+                        'Detalle creado: %s (cantidad solicitada: %.2f) por %s',
+                        $producto_nombre,
+                        $cantidad_base,
+                        $empleado_nombre
+                    )
+                );
             }
 
             // 5. Obtener resumen para el front
@@ -162,6 +181,21 @@ class AtencionService
                     $requerimiento = RequerimientosDetalleData::get_id_requerimiento_by_detalle((int) $id_detalle);
                     RequerimientosData::update_requerimiento_estado((int) $requerimiento->id_requerimiento_almacen, EstadoRequerimiento::EnDespacho->value);
                 }
+
+                // 4. Registrar evento de trazabilidad para que la pantalla
+                //    "Seguimiento del requerimiento" tenga historial real.
+                //    La descripcion incluye el nombre completo del empleado,
+                //    no el id, para que sea legible en la UI.
+                $nombre_empleado = EmpleadoHelper::nombre_completo($id_empleado);
+                $descripcion = $comentario_decision
+                    ? "{$comentario_decision}"
+                    : "Estado cambiado a {$nuevo_estado} por {$nombre_empleado}.";
+                RequerimientosDetalleData::insert_detalle_log(
+                    id_detalle: (int) $id_detalle,
+                    id_empleado: $id_empleado,
+                    estado: $nuevo_estado,
+                    descripcion: $descripcion
+                );
             }
 
             $mensaje = count($ids_detalles) > 1
@@ -240,7 +274,7 @@ class AtencionService
             )->get();
 
             $algunoNoEntregado = $detallesActuales->contains(
-                fn($d) => (float) $d->cantidad_entregada_base === 0.0,
+                fn($d) => !RequerimientosDetalleData::tiene_entregas_activas((int) $d->id),
             );
 
             if (!$algunoNoEntregado) {
@@ -268,7 +302,7 @@ class AtencionService
                         "El detalle {$idDetalle} no pertenece a este requerimiento",
                     );
                 }
-                if ((float) $fila->cantidad_entregada_base > 0) {
+                if (RequerimientosDetalleData::tiene_entregas_activas($idDetalle)) {
                     return ApiResponse::error(
                         "El detalle {$idDetalle} ya tiene entregas iniciadas y no puede modificarse",
                     );
@@ -312,12 +346,6 @@ class AtencionService
                         'comentario' => array_key_exists('comentario', $det)
                             ? ($det['comentario'] ?: null)
                             : $fila->comentario,
-                        'para_mantenimiento' => array_key_exists('para_mantenimiento', $det)
-                            ? (bool) $det['para_mantenimiento']
-                            : (bool) $fila->para_mantenimiento,
-                        'id_activo_fijo_destino' => array_key_exists('id_activo_fijo_destino', $det)
-                            ? ($det['id_activo_fijo_destino'] ?: null)
-                            : $fila->id_activo_fijo_destino,
                         'con_magnitud' => $conMagnitud,
                         'cantidad_items' => $cantidadItems ?: null,
                         'valor_magnitud' => isset($det['valor_magnitud'])
@@ -330,7 +358,7 @@ class AtencionService
 
             // 3. Procesar detalles nuevos (crear). Mismas reglas de
             //    validacion que `registrar_requerimiento` (cantidad > 0,
-            //    contenido > 0, mantenimiento => activo fijo destino).
+            //    contenido > 0).
             foreach ($detalles_crear as $det) {
                 $idProducto = (int) ($det['id_producto'] ?? 0);
                 $idUnidad = (int) ($det['id_unidad_medida'] ?? 0);
@@ -352,11 +380,6 @@ class AtencionService
                     $cantidadItems,
                     $valorMagnitudBase,
                 );
-
-                $paraMantenimiento = (bool) ($det['para_mantenimiento'] ?? false);
-                $idActivoDestino = $paraMantenimiento
-                    ? (int) ($det['id_activo_fijo_destino'] ?? 0) ?: null
-                    : null;
 
                 RequerimientosDetalleData::crear_detalle(
                     $id_requerimiento,
@@ -383,7 +406,7 @@ class AtencionService
                 if (!$fila || (int) $fila->id_requerimiento_almacen !== $id_requerimiento) {
                     continue;
                 }
-                if ((float) $fila->cantidad_entregada_base > 0) {
+                if (RequerimientosDetalleData::tiene_entregas_activas($idDetalle)) {
                     return ApiResponse::error(
                         "El detalle {$idDetalle} ya tiene entregas iniciadas y no puede eliminarse",
                     );

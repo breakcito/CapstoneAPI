@@ -16,12 +16,16 @@ Route::middleware('auth.jwt.custom')->group(function () {
             Route::get('/trazabilidad', 'get_trazabilidad');
             Route::post('/evidencias', 'subir_evidencias');
             Route::put('/{id}', 'editar_requerimiento');
+            // Anular un requerimiento completo (solo si no tiene entregas activas)
+            Route::post('/{id}/anular', 'anular_requerimiento');
         });
 
         // Entregas (Despacho, Stock, Lotes)
         Route::controller(EntregaController::class)->group(function () {
             Route::post('/save-entrega', 'crear_entrega');
             Route::get('/entregas', 'get_historial_entregas');
+            // Anular una entrega: devuelve stock al lote y registra Kardex inverso
+            Route::post('/entregas/{id}/anular', 'anular_entrega');
         });
     });
 });

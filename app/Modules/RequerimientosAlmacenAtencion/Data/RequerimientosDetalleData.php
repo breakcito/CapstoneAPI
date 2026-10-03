@@ -28,23 +28,53 @@ class RequerimientosDetalleData
     }
 
     /**
-     * Obtiene los logs de trazabilidad de un detalle
+     * Obtiene los logs de trazabilidad de un detalle, ordenados del mas
+     * reciente al mas antiguo.
+     *
+     * @return array Lista de eventos con forma
+     *   { id_log, id_requerimiento_almacen_detalle, id_empleado, estado,
+     *     descripcion, created_at, empleado }
      */
     public static function get_detalle_logs(int $id_detalle)
     {
-        return [];
+        $sql = "
+        SELECT
+            log.id AS id_log,
+            log.id_requerimiento_almacen_detalle,
+            log.id_empleado,
+            log.estado,
+            log.descripcion,
+            log.created_at,
+            CONCAT(emp.nombre, ' ', emp.apellido) AS empleado
+        FROM requerimiento_almacen_detalle_log log
+        LEFT JOIN empleado emp ON emp.id = log.id_empleado
+        WHERE log.id_requerimiento_almacen_detalle = :id_detalle
+        ORDER BY log.created_at ASC, log.id ASC
+        ";
+        return DB::select($sql, ['id_detalle' => $id_detalle]);
     }
 
     /**
-     * Inserta un log de trazabilidad para un detalle
+     * Inserta un log de trazabilidad para un detalle.
+     *
+     * Helper: se llama desde AtencionService, EntregaService y los
+     * controllers que cambian el estado de un detalle o lo asocian a
+     * una entrega, para que la pantalla "Seguimiento del requerimiento"
+     * tenga datos que mostrar.
      */
     public static function insert_detalle_log(
         int $id_detalle,
-        int $id_empleado,
-        string $descripcion,
-        string $estado
+        ?int $id_empleado,
+        string $estado,
+        ?string $descripcion = null
     ) {
-        return null;
+        return DB::table('requerimiento_almacen_detalle_log')->insertGetId([
+            'id_requerimiento_almacen_detalle' => $id_detalle,
+            'id_empleado' => $id_empleado,
+            'estado' => $estado,
+            'descripcion' => $descripcion,
+            'created_at' => now(),
+        ]);
     }
 
     /**
@@ -67,14 +97,25 @@ class RequerimientosDetalleData
 
     /**
      * Incrementar cantidades entregadas en el detalle del requerimiento
+     *
+     * NOTA: la tabla `requerimiento_almacen_detalle` NO tiene columnas
+     * `cantidad_entregada` ni `cantidad_entregada_base`. Esos valores
+     * se calculan en runtime con un SUM sobre las entregas activas
+     * (ver `RequerimientoAlmacenDetalle::get_detalles()`).
+     *
+     * Este metodo queda obsoleto: lo conservamos momentaneamente para no
+     * romper imports legacy, pero NO debe llamarse. La entrega activa
+     * ya se contabiliza automaticamente al persistir el detalle de la
+     * entrega.
+     *
+     * @deprecated Eliminar cuando se confirme que no hay callers externos.
      */
     public static function increment_detalle_entregado(int $id_detalle, float $cantidad_req, float $cantidad_base)
     {
-        return RequerimientoAlmacenDetalle::where('id', $id_detalle)
-            ->incrementEach([
-                'cantidad_entregada' => $cantidad_req,
-                'cantidad_entregada_base' => $cantidad_base
-            ]);
+        // Sin efecto: las cantidades entregadas se derivan de
+        // `requerimiento_almacen_entrega_detalle` con JOIN por
+        // `requerimiento_almacen_entrega.estado = 'Entregado'`.
+        return 0;
     }
 
     public static function get_id_requerimiento_by_detalle(int $id_detalle)
@@ -100,8 +141,27 @@ class RequerimientosDetalleData
     }
 
     /**
+     * Devuelve true si el detalle tiene al menos una entrega ACTIVA
+     * (estado de la cabecera de entrega = 'Entregado'). Se usa en
+     * lugar de leer una columna `cantidad_entregada_base` que NO
+     * existe en la tabla: esa cantidad se calcula en runtime.
+     */
+    public static function tiene_entregas_activas(int $id_detalle): bool
+    {
+        $count = DB::table('requerimiento_almacen_entrega_detalle as ed')
+            ->join('requerimiento_almacen_entrega as e', 'e.id', '=', 'ed.id_requerimiento_almacen_entrega')
+            ->where('ed.id_requerimiento_almacen_detalle', $id_detalle)
+            ->where('e.estado', 'Entregado')
+            ->count();
+        return $count > 0;
+    }
+
+    /**
      * Actualiza los campos editables de un detalle. Recalcula
      * `cantidad_solicitada_base` segun el modelo de magnitud del item.
+     *
+     * White-list alineada al esquema actual de `requerimiento_almacen_detalle`.
+     * Se omiten campos que ya no existen: `para_mantenimiento`, `id_activo_fijo_destino`.
      */
     public static function update_detalle_editable(int $id_detalle, array $campos)
     {
@@ -111,8 +171,6 @@ class RequerimientosDetalleData
             'contenido_por_presentacion',
             'cantidad_solicitada_base',
             'comentario',
-            'para_mantenimiento',
-            'id_activo_fijo_destino',
             'con_magnitud',
             'cantidad_items',
             'valor_magnitud',
@@ -135,17 +193,14 @@ class RequerimientosDetalleData
         if (isset($updateData['con_magnitud'])) {
             $updateData['con_magnitud'] = $updateData['con_magnitud'] ? 1 : 0;
         }
-        if (isset($updateData['para_mantenimiento'])) {
-            $updateData['para_mantenimiento'] = $updateData['para_mantenimiento'] ? 1 : 0;
-        }
 
         return RequerimientoAlmacenDetalle::where('id', $id_detalle)
             ->update($updateData);
     }
 
     /**
-     * Elimina un detalle solo si su cantidad_entregada_base es 0 (aun no
-     * tuvo despacho). Devuelve true si elimino, false si bloqueo por seguridad.
+     * Elimina un detalle solo si NO tiene entregas activas (estado='Entregado')
+     * apuntando a el. Devuelve true si elimino, false si bloqueo por seguridad.
      */
     public static function delete_detalle_si_no_entregado(int $id_detalle): bool
     {
@@ -153,7 +208,13 @@ class RequerimientosDetalleData
         if (!$fila) {
             return false;
         }
-        if ((float) $fila->cantidad_entregada_base > 0) {
+        // Verificamos si existe AL MENOS una entrega activa contra este detalle.
+        $entregasActivas = DB::table('requerimiento_almacen_entrega_detalle as ed')
+            ->join('requerimiento_almacen_entrega as e', 'e.id', '=', 'ed.id_requerimiento_almacen_entrega')
+            ->where('ed.id_requerimiento_almacen_detalle', $id_detalle)
+            ->where('e.estado', 'Entregado')
+            ->count();
+        if ($entregasActivas > 0) {
             return false;
         }
         $deleted = RequerimientoAlmacenDetalle::where('id', $id_detalle)->delete();

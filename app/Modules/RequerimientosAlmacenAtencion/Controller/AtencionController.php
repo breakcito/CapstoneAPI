@@ -2,11 +2,14 @@
 
 namespace App\Modules\RequerimientosAlmacenAtencion\Controller;
 
+use App\Shared\Enums\RequerimientoAlmacen\EstadoRequerimiento;
+use App\Shared\Helpers\UploadHelper;
 use App\Shared\Responses\ApiResponse;
 use App\Modules\RequerimientosAlmacenAtencion\Service\AtencionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class AtencionController extends Controller
@@ -41,6 +44,7 @@ class AtencionController extends Controller
 
         $reglas = [
             'id_contratista_solicitante' => 'nullable|integer',
+            'solicitante_es_contratista' => 'nullable|boolean',
             'id_almacen_destino' => 'required|integer',
             'fecha_solicitud' => 'nullable|date',
             'observacion' => 'nullable|string',
@@ -54,9 +58,18 @@ class AtencionController extends Controller
             'detalles.*.cantidad_items' => 'nullable|numeric|min:0',
             'detalles.*.valor_magnitud' => 'nullable|numeric|min:0',
             'detalles.*.valor_magnitud_base' => 'nullable|numeric|min:0',
-            'evidencias' => 'nullable|array',
-            'evidencias.*' => 'file',
+            'evidencias' => 'nullable|array|max:' . (UploadHelper::MAX_TOTAL_BYTES / 1024),
+            'evidencias.*' => 'file|max:' . (UploadHelper::MAX_FILE_BYTES / 1024),
         ];
+
+        // Validar los archivos de forma previa. La regla `file` de Laravel
+        // falla con un mensaje generico si PHP rechazo el archivo por
+        // tamano (UPLOAD_ERR_INI_SIZE). Aqui leemos `$_FILES` y damos un
+        // mensaje claro.
+        $erroresUpload = UploadHelper::validar($request, 'evidencias');
+        if (!empty($erroresUpload)) {
+            return response()->json(ApiResponse::error('Archivos invalidos: ' . implode(' ', $erroresUpload)));
+        }
 
         $validator = Validator::make($request->all(), $reglas);
 
@@ -65,13 +78,44 @@ class AtencionController extends Controller
             return response()->json(ApiResponse::error('Datos inválidos: ' . implode(', ', $errores)));
         }
 
-        $id_empleado_registro = $authUser->id_empleado;
+        $id_empleado_logueado = (int) $authUser->id_empleado;
         $evidencias = $request->file('evidencias', []);
+
+        // Determinar el solicitante. El front envia `id_contratista_solicitante`
+        // (que en realidad es el id del solicitante, sea contratista o
+        // empleado) y `solicitante_es_contratista` (bool).
+        //
+        // - Si es contratista: ese id se guarda en
+        //   `requerimiento_almacen.id_contratista_solicitante`. El
+        //   `id_empleado_registro` queda con el logueado (quien registra).
+        // - Si es empleado: ese id se guarda en
+        //   `requerimiento_almacen.id_empleado_registro` (sobrescribiendo
+        //   al logueado, porque el solicitante ES ese empleado). El
+        //   `id_contratista_solicitante` queda null.
+        $id_solicitante = $request->id_contratista_solicitante
+            ? (int) $request->id_contratista_solicitante
+            : null;
+        $solicitante_es_contratista = $request->has('solicitante_es_contratista')
+            ? $request->boolean('solicitante_es_contratista')
+            : false;
+
+        $id_contratista_a_persistir = null;
+        $id_empleado_a_persistir = $id_empleado_logueado;
+
+        if ($id_solicitante !== null) {
+            if ($solicitante_es_contratista) {
+                $id_contratista_a_persistir = $id_solicitante;
+                // id_empleado_registro queda con el logueado.
+            } else {
+                $id_empleado_a_persistir = $id_solicitante;
+                // id_contratista_solicitante queda null.
+            }
+        }
 
         try {
             $resultado = AtencionService::registrar_requerimiento(
-                id_contratista_solicitante: $request->id_contratista_solicitante ? (int) $request->id_contratista_solicitante : null,
-                id_empleado_registro: (int) $id_empleado_registro,
+                id_contratista_solicitante: $id_contratista_a_persistir,
+                id_empleado_registro: $id_empleado_a_persistir,
                 id_almacen_destino: (int) $request->id_almacen_destino,
                 detalles: $request->detalles,
                 fecha_solicitud: $request->fecha_solicitud,
@@ -179,8 +223,15 @@ class AtencionController extends Controller
         $validator = Validator::make($request->all(), [
             'id_requerimiento' => 'required|integer',
             'evidencias' => 'required|array|min:1',
-            'evidencias.*' => 'file',
+            'evidencias.*' => 'file|max:' . (UploadHelper::MAX_FILE_BYTES / 1024),
         ]);
+
+        // Validar tamano de los archivos antes de la validacion de Laravel
+        // para dar un mensaje claro si excede el limite de PHP.
+        $erroresUpload = UploadHelper::validar($request, 'evidencias');
+        if (!empty($erroresUpload)) {
+            return response()->json(ApiResponse::error('Archivos invalidos: ' . implode(' ', $erroresUpload)), 400);
+        }
 
         if ($validator->fails()) {
             return response()->json(ApiResponse::error($validator->errors()->first()), 400);
@@ -199,7 +250,7 @@ class AtencionController extends Controller
 
     /**
      * Edita un requerimiento existente. Permite modificar la cabecera y los
-     * detalles que aun no tengan entrega iniciada (cantidad_entregada_base = 0).
+     * detalles que aun no tengan entregas activas (estado de entrega = 'Entregado').
      */
     public function editar_requerimiento(Request $request, int $id): JsonResponse
     {
@@ -209,24 +260,18 @@ class AtencionController extends Controller
         }
 
         $reglas = [
-            'id_empleado_solicitante' => 'nullable|integer',
             'id_contratista_solicitante' => 'nullable|integer',
-            'id_labor' => 'nullable|integer',
-            'premura' => 'nullable|string',
-            'fecha_entrega_requerida' => 'nullable|date',
+            'solicitante_es_contratista' => 'nullable|boolean',
             'fecha_solicitud' => 'nullable|date',
             'observacion' => 'nullable|string',
-            'es_auditable' => 'nullable|boolean',
             'evidencias_nuevas' => 'nullable|array',
-            'evidencias_nuevas.*' => 'file',
+            'evidencias_nuevas.*' => 'file|max:' . (UploadHelper::MAX_FILE_BYTES / 1024),
             'detalles_editar' => 'nullable|array',
             'detalles_editar.*.id_requerimiento_almacen_detalle' => 'required_with:detalles_editar|integer',
             'detalles_editar.*.id_unidad_medida' => 'nullable|integer',
             'detalles_editar.*.cantidad_solicitada' => 'nullable|numeric|min:0',
             'detalles_editar.*.contenido_por_presentacion' => 'nullable|numeric|min:0.0001',
             'detalles_editar.*.comentario' => 'nullable|string',
-            'detalles_editar.*.para_mantenimiento' => 'nullable|boolean',
-            'detalles_editar.*.id_activo_fijo_destino' => 'nullable|integer',
             'detalles_editar.*.con_magnitud' => 'nullable|boolean',
             'detalles_editar.*.cantidad_items' => 'nullable|numeric|min:0',
             'detalles_editar.*.valor_magnitud' => 'nullable|numeric|min:0',
@@ -239,8 +284,6 @@ class AtencionController extends Controller
             'detalles_crear.*.cantidad_solicitada' => 'required_with:detalles_crear|numeric|min:0.01',
             'detalles_crear.*.contenido_por_presentacion' => 'required_with:detalles_crear|numeric|min:0.0001',
             'detalles_crear.*.comentario' => 'nullable|string',
-            'detalles_crear.*.para_mantenimiento' => 'nullable|boolean',
-            'detalles_crear.*.id_activo_fijo_destino' => 'nullable|integer',
             'detalles_crear.*.con_magnitud' => 'nullable|boolean',
             'detalles_crear.*.cantidad_items' => 'nullable|numeric|min:0',
             'detalles_crear.*.valor_magnitud' => 'nullable|numeric|min:0',
@@ -249,27 +292,44 @@ class AtencionController extends Controller
 
         $validator = Validator::make($request->all(), $reglas);
 
+        // Validar tamano de archivos subidos para que el mensaje sea claro
+        // si excede el limite del servidor.
+        $erroresUpload = UploadHelper::validar($request, 'evidencias_nuevas');
+        if (!empty($erroresUpload)) {
+            return response()->json(ApiResponse::error('Archivos invalidos: ' . implode(' ', $erroresUpload)));
+        }
+
         if ($validator->fails()) {
             $errores = $validator->errors()->all();
             return response()->json(ApiResponse::error('Datos inválidos: ' . implode(', ', $errores)));
         }
 
+        // Misma logica de "solicitante dual" que en crear_requerimiento:
+        // el id llega en `id_contratista_solicitante` y el flag
+        // `solicitante_es_contratista` indica en que columna persistirlo.
+        $id_solicitante_edit = $request->has('id_contratista_solicitante')
+            ? ($request->id_contratista_solicitante ? (int) $request->id_contratista_solicitante : null)
+            : null;
+        $solicitante_es_contratista_edit = $request->has('solicitante_es_contratista')
+            ? $request->boolean('solicitante_es_contratista')
+            : false;
+
         $cabecera = [
-            'id_empleado_solicitante' => $request->has('id_empleado_solicitante')
-                ? ($request->id_empleado_solicitante ? (int) $request->id_empleado_solicitante : null)
-                : null,
-            'id_contratista_solicitante' => $request->has('id_contratista_solicitante')
-                ? ($request->id_contratista_solicitante ? (int) $request->id_contratista_solicitante : null)
-                : null,
-            'id_labor' => $request->has('id_labor')
-                ? ($request->id_labor ? (int) $request->id_labor : null)
-                : null,
-            'premura' => $request->input('premura'),
-            'fecha_entrega_requerida' => $request->input('fecha_entrega_requerida'),
+            'id_contratista_solicitante' => null,
+            'id_empleado_registro' => (int) $authUser->id_empleado,
             'fecha_solicitud' => $request->input('fecha_solicitud'),
             'observacion' => $request->input('observacion'),
-            'es_auditable' => $request->has('es_auditable') ? (bool) $request->es_auditable : null,
         ];
+
+        if ($id_solicitante_edit !== null) {
+            if ($solicitante_es_contratista_edit) {
+                $cabecera['id_contratista_solicitante'] = $id_solicitante_edit;
+                // id_empleado_registro queda con el logueado (quien edita).
+            } else {
+                $cabecera['id_empleado_registro'] = $id_solicitante_edit;
+                // id_contratista_solicitante queda null.
+            }
+        }
 
         $detalles_editar = $request->input('detalles_editar', []);
         $detalles_crear = $request->input('detalles_crear', []);
@@ -290,6 +350,87 @@ class AtencionController extends Controller
             return response()->json($resultado);
         } catch (\Exception $e) {
             return response()->json(ApiResponse::error('Error al editar requerimiento: ' . $e->getMessage()), 500);
+        }
+    }
+
+    /**
+     * Anular un requerimiento completo.
+     *
+     * Comportamiento:
+     * - Si el requerimiento NO tiene entregas activas: solo cambia el estado
+     *   de la cabecera a "Anulado".
+     * - Si el requerimiento TIENE entregas (estado='Entregado'): ademas de
+     *   cambiar la cabecera a "Anulado", anula cada entrega activa, lo que
+     *   REINTEGRA el stock a los lotes originales y registra el movimiento
+     *   inverso en Kardex (Ingreso / Reingreso) por cada item.
+     * - Si ya esta Anulado, no-op (devuelve ok para idempotencia).
+     */
+    public function anular_requerimiento(Request $request, int $id): JsonResponse
+    {
+        $authUser = $request->attributes->get('auth_user');
+        if (!$authUser) {
+            return response()->json(ApiResponse::error('No autorizado'), 401);
+        }
+
+        $motivo = $request->input('motivo');
+
+        try {
+            $requerimiento = DB::table('requerimiento_almacen')->where('id', $id)->first();
+            if (!$requerimiento) {
+                return response()->json(ApiResponse::error('Requerimiento no encontrado'), 404);
+            }
+
+            if ($requerimiento->estado === EstadoRequerimiento::Anulado->value) {
+                return response()->json(ApiResponse::success(null, 'El requerimiento ya se encontraba anulado'));
+            }
+
+            // Anular cabecera + cada entrega activa. Si una entrega falla,
+            // la transaccion hace rollback automatico y no se anula nada.
+            DB::transaction(function () use ($id, $motivo) {
+                // 1. Listar entregas activas (estado='Entregado').
+                $entregasActivasIds = DB::table('requerimiento_almacen_entrega')
+                    ->where('id_requerimiento_almacen', $id)
+                    ->where('estado', 'Entregado')
+                    ->pluck('id')
+                    ->toArray();
+
+                // 2. Anular cada entrega. Cada llamada ya hace su propia
+                //    transaccion interna (reintegrar_stock + kardex inverso
+                //    + marcar cabecera entrega como Anulada). Como estamos
+                //    dentro de una transaccion padre, cualquier error hace
+                //    rollback global.
+                foreach ($entregasActivasIds as $idEntrega) {
+                    $result = \App\Modules\RequerimientosAlmacenAtencion\Service\EntregaService::anular_entrega(
+                        (int) $idEntrega,
+                        $motivo ? "Anulacion por cancelacion de requerimiento: {$motivo}" : null
+                    );
+                    // EntregaService::anular_entrega devuelve ApiResponse.
+                    // Si fallo, lanzamos excepcion para activar rollback.
+                    if (!$result['success']) {
+                        throw new \Exception($result['message'] ?? 'Error al anular entrega');
+                    }
+                }
+
+                // 3. Cambiar el estado de la cabecera del requerimiento.
+                DB::table('requerimiento_almacen')
+                    ->where('id', $id)
+                    ->update([
+                        'estado' => EstadoRequerimiento::Anulado->value,
+                    ]);
+            });
+
+            $cantEntregas = DB::table('requerimiento_almacen_entrega')
+                ->where('id_requerimiento_almacen', $id)
+                ->where('estado', 'Anulado')
+                ->count();
+
+            $msg = $cantEntregas > 0
+                ? "Requerimiento anulado correctamente. Se anularon {$cantEntregas} entrega(s) con reingreso de stock y Kardex."
+                : 'Requerimiento anulado correctamente';
+
+            return response()->json(ApiResponse::success(null, $msg));
+        } catch (\Exception $e) {
+            return response()->json(ApiResponse::error('Error al anular requerimiento: ' . $e->getMessage()), 500);
         }
     }
 }

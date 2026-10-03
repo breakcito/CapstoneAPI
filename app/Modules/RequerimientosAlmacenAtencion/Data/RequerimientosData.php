@@ -72,18 +72,21 @@ class RequerimientosData
     /**
      * Actualiza la cabecera de un requerimiento con la lista blanca de campos
      * editables. Solo se aplican los campos que vienen no-null en $campos.
+     *
+     * White-list alineada al esquema actual de `requerimiento_almacen`
+     * (sin columnas que ya no existen: id_labor, premura, fecha_entrega_requerida,
+     * es_auditable, id_empleado_solicitante).
+     *
+     * NOTA: el `id_empleado_registro` se incluye para soportar el caso
+     * "el solicitante es un empleado" (sobrescribe el logueado original).
      */
     public static function update_requerimiento_cabecera(int $id_requerimiento, array $campos)
     {
         $permitidos = [
-            'id_empleado_solicitante',
             'id_contratista_solicitante',
-            'id_labor',
-            'premura',
-            'fecha_entrega_requerida',
+            'id_empleado_registro',
             'fecha_solicitud',
             'observacion',
-            'es_auditable',
         ];
 
         $updateData = [];

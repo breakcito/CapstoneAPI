@@ -145,4 +145,65 @@ class LotesProductosService
 
         return true;
     }
+
+    /**
+     * Reintegrar stock a un lote (operacion inversa de descontar_stock).
+     *
+     * Se usa cuando se anula una entrega y hay que devolver el material al lote
+     * original. Registra el movimiento inverso en Kardex (Ingreso / Reingreso)
+     * para mantener la trazabilidad contable.
+     *
+     * @param string $tipo_origen Por defecto KardexOrigenMovimiento::Reingreso.
+     *                             Se permite override por si el caller quiere
+     *                             clasificarlo distinto (ej. AjusteStock).
+     */
+    public static function reintegrar_stock(
+        int $id_lote,
+        float $cantidad_lote,
+        float $cantidad_base,
+        ?string $descripcion = null,
+        ?string $tipo_origen = null
+    ): bool {
+        $lote = LotesProductosData::get_lote_dinamico_by_id($id_lote, [
+            'id_almacen',
+            'stock_actual',
+            'stock_actual_base',
+            'costo_por_unidad',
+        ]);
+
+        if (!$lote) {
+            return false;
+        }
+
+        $stockAnterior = (float) $lote['stock_actual'];
+        $stockAnteriorBase = (float) $lote['stock_actual_base'];
+        $costoUnitario = (float) ($lote['costo_por_unidad'] ?? 0);
+
+        $nuevoStock = $stockAnterior + $cantidad_lote;
+        $nuevoStockBase = $stockAnteriorBase + $cantidad_base;
+
+        LotesProductosData::update_stock($id_lote, $nuevoStock, $nuevoStockBase);
+
+        // Costo del reingreso: proporcional a lo devuelto. Si la entrega
+        // original ya registro un costo, este es el simétrico. Usamos el
+        // costo_por_unidad vigente del lote (que no cambia al reingresar).
+        $costoMovimiento = $cantidad_lote * $costoUnitario;
+
+        KardexProductosService::registrar_kardex(
+            tipo_movimiento: KardexTipoMovimiento::Ingreso,
+            tipo_origen: $tipo_origen ?? KardexOrigenMovimiento::Reingreso->value,
+            descripcion: $descripcion ?? "Reingreso por anulación de entrega",
+            cantidad_movimiento: $cantidad_lote,
+            cantidad_movimiento_base: $cantidad_base,
+            nuevo_stock: $nuevoStock,
+            nuevo_stock_base: $nuevoStockBase,
+            id_lote: $id_lote,
+            id_almacen: (int) $lote['id_almacen'],
+            stock_anterior: $stockAnterior,
+            stock_anterior_base: $stockAnteriorBase,
+            costo: $costoMovimiento
+        );
+
+        return true;
+    }
 }
