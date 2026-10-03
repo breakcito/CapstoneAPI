@@ -169,6 +169,17 @@ class AtencionService
     {
         return DB::transaction(function () use ($id_empleado, $ids_detalles, $nuevo_estado, $comentario_decision) {
 
+            // Validar que ningún detalle pertenezca a un requerimiento anulado
+            foreach ($ids_detalles as $id_detalle) {
+                $reqInfo = RequerimientosDetalleData::get_id_requerimiento_by_detalle((int) $id_detalle);
+                if ($reqInfo) {
+                    $reqCabecera = DB::table('requerimiento_almacen')->where('id', $reqInfo->id_requerimiento_almacen)->first();
+                    if ($reqCabecera && ($reqCabecera->estado === EstadoRequerimiento::Anulado->value || (string) $reqCabecera->estado === 'Anulado')) {
+                        return ApiResponse::error('No se puede alterar el estado de un producto en un requerimiento anulado');
+                    }
+                }
+            }
+
             foreach ($ids_detalles as $id_detalle) {
                 // 1. Actualizar el estado del detalle
                 RequerimientosDetalleData::update_detalle_estado((int) $id_detalle, $nuevo_estado, $id_empleado, $comentario_decision);
@@ -228,6 +239,10 @@ class AtencionService
                 throw new \Exception('Requerimiento no encontrado');
             }
 
+            if ($requerimiento->estado === EstadoRequerimiento::Anulado->value || (string) $requerimiento->estado === 'Anulado') {
+                return ApiResponse::error('No se pueden subir evidencias a un requerimiento anulado');
+            }
+
             $nuevasEvidencias = RequerimientosData::guardar_evidencias($evidencias);
 
             $evidenciasExistentes = $requerimiento->evidencias ? json_decode($requerimiento->evidencias, true) : [];
@@ -264,6 +279,10 @@ class AtencionService
             $requerimiento = \App\Models\RequerimientoAlmacen::find($id_requerimiento);
             if (!$requerimiento) {
                 return ApiResponse::error('Requerimiento no encontrado');
+            }
+
+            if ($requerimiento->estado === EstadoRequerimiento::Anulado->value || (string) $requerimiento->estado === 'Anulado') {
+                return ApiResponse::error('No se puede editar un requerimiento anulado');
             }
 
             // Validar que al menos un detalle siga sin entrega iniciada; si
