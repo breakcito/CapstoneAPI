@@ -386,7 +386,8 @@ class AtencionController extends Controller
 
             // Anular cabecera + cada entrega activa. Si una entrega falla,
             // la transaccion hace rollback automatico y no se anula nada.
-            DB::transaction(function () use ($id, $motivo) {
+            $idEmpleadoAnula = (int) $authUser->id_empleado;
+            DB::transaction(function () use ($id, $motivo, $idEmpleadoAnula) {
                 // 1. Listar entregas activas (estado='Entregado').
                 $entregasActivasIds = DB::table('requerimiento_almacen_entrega')
                     ->where('id_requerimiento_almacen', $id)
@@ -401,8 +402,9 @@ class AtencionController extends Controller
                 //    rollback global.
                 foreach ($entregasActivasIds as $idEntrega) {
                     $result = \App\Modules\RequerimientosAlmacenAtencion\Service\EntregaService::anular_entrega(
-                        (int) $idEntrega,
-                        $motivo ? "Anulacion por cancelacion de requerimiento: {$motivo}" : null
+                        id_entrega: (int) $idEntrega,
+                        motivo: $motivo ? "Anulacion por cancelacion de requerimiento: {$motivo}" : null,
+                        id_empleado_anula: $idEmpleadoAnula,
                     );
                     // EntregaService::anular_entrega devuelve ApiResponse.
                     // Si fallo, lanzamos excepcion para activar rollback.
