@@ -5,6 +5,7 @@ namespace App\Modules\RequerimientosAlmacenAtencion\Service;
 use App\Data\LotesProductosData;
 use App\Services\LotesProductosService;
 use App\Shared\Enums\Kardex\KardexOrigenMovimiento;
+use App\Shared\Enums\RequerimientoAlmacen\EstadoRequerimiento;
 use App\Shared\Enums\RequerimientoAlmacen\EstadoRequerimientoDetalle;
 use App\Shared\Enums\RequerimientoAlmacen\EstadoRequerimientoEntrega;
 use App\Shared\Helpers\ArchivoHelper;
@@ -65,6 +66,11 @@ class EntregaService
             }
 
             $id_requerimiento = (int) $entrega->id_requerimiento_almacen;
+
+            $requerimientoCabecera = DB::table('requerimiento_almacen')->where('id', $id_requerimiento)->first();
+            if ($requerimientoCabecera && ($requerimientoCabecera->estado === EstadoRequerimiento::Anulado->value || (string) $requerimientoCabecera->estado === 'Anulado')) {
+                return ApiResponse::error('No se pueden alterar las entregas de un requerimiento anulado');
+            }
 
             // Obtenemos el correlativo del requerimiento para incluirlo en
             // la descripcion del Kardex inverso, asi queda registrada la
@@ -166,6 +172,13 @@ class EntregaService
         array $detalles
     ) {
         return DB::transaction(function () use ($id_empleado_entrega, $id_requerimiento, $id_empleado_recibe, $fecha_entrega, $observacion, $evidencias, $detalles) {
+            $reqCabecera = DB::table('requerimiento_almacen')->where('id', $id_requerimiento)->first();
+            if (!$reqCabecera) {
+                return ApiResponse::error('Requerimiento no encontrado', 404);
+            }
+            if ($reqCabecera->estado === EstadoRequerimiento::Anulado->value || (string) $reqCabecera->estado === 'Anulado') {
+                return ApiResponse::error('No se pueden registrar entregas para un requerimiento anulado');
+            }
 
             // Procesar Evidencias si existen
             $evidenciasData = null;
