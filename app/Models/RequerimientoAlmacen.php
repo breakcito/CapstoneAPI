@@ -44,10 +44,13 @@ class RequerimientoAlmacen extends Model
             alm.nombre AS almacen_destino,
             --
             ra.id_contratista_solicitante,
+            ra.id_empleado_registro,
+            -- Solicitante: si es contratista, muestra su nombre desde
+            -- ctr (unido por id_contratista_solicitante). Si no, el
+            -- solicitante ES el empleado que registro (mismo registro).
             CASE
-                WHEN ra.id_empleado_solicitante IS NOT NULL THEN CONCAT(emp.nombre, " ", emp.apellido)
                 WHEN ra.id_contratista_solicitante IS NOT NULL THEN CONCAT(ctr.nombre, " ", ctr.apellido)
-                ELSE NULL
+                ELSE CONCAT(empr.nombre, " ", empr.apellido)
             END AS solicitante,
             CONCAT(empr.nombre, " ", empr.apellido) AS empleado_registro,
             --
@@ -56,7 +59,37 @@ class RequerimientoAlmacen extends Model
             ra.observacion,
             ra.fecha_solicitud,
             ra.estado,
-            ra.created_at
+            ra.created_at,
+            -- Progreso general de atencion: promedio del porcentaje de
+            -- cada detalle. Si no hay detalles, 0. Esto permite que la
+            -- pagina principal muestre el avance real de cada
+            -- requerimiento en la lista.
+            COALESCE((
+                SELECT ROUND(AVG(
+                    CASE
+                        WHEN rad.cantidad_solicitada_base IS NULL OR rad.cantidad_solicitada_base = 0
+                            THEN 0
+                        ELSE LEAST(
+                            100,
+                            ROUND(
+                                (
+                                    COALESCE((
+                                        SELECT SUM(entd.cantidad_base)
+                                        FROM requerimiento_almacen_entrega_detalle entd
+                                        INNER JOIN requerimiento_almacen_entrega rae
+                                            ON rae.id = entd.id_requerimiento_almacen_entrega
+                                        WHERE entd.id_requerimiento_almacen_detalle = rad.id
+                                          AND rae.estado = :estado_entregado_3
+                                    ), 0) / rad.cantidad_solicitada_base
+                                ) * 100,
+                                2
+                            )
+                        )
+                    END
+                ), 0)
+                FROM requerimiento_almacen_detalle rad
+                WHERE rad.id_requerimiento_almacen = ra.id
+            ), 0) AS porcentaje_progreso_general
         FROM
             requerimiento_almacen ra
         INNER JOIN almacen alm ON alm.id = ra.id_almacen_destino
@@ -65,7 +98,9 @@ class RequerimientoAlmacen extends Model
         WHERE 1=1
         ';
 
-        $params = [];
+        $params = [
+            'estado_entregado_3' => 'Entregado',
+        ];
 
         if ($id_requerimiento !== null) {
             $sql .= ' AND ra.id = :id_requerimiento';

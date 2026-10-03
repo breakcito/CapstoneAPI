@@ -15,12 +15,15 @@ class EntregasData
      */
     public static function get_historial_entregas(?int $id_requerimiento = null, ?int $id_entrega = null)
     {
+        // Tanto el que entrega como el que recibe son empleados de la
+        // tabla empleado (los contratistas con es_contratista=1 tambien
+        // viven alli). Por eso hacemos JOIN solo a empleado dos veces.
         $sql = '
         SELECT
             ent.id AS id_requerimiento_almacen_entrega,
             CONCAT(emp_ent.nombre," ",emp_ent.apellido) AS empleado_entrega,
             CONCAT(emp_rec.nombre," ",emp_rec.apellido) AS empleado_recibe,
-            CONCAT(ctr_rec.nombre," ",ctr_rec.apellido) AS contratista_recibe,
+            CASE WHEN emp_rec.es_contratista = 1 THEN 1 ELSE 0 END AS receptor_es_contratista,
             ent.correlativo,
             ent.fecha_hora_entrega,
             ent.observacion,
@@ -33,8 +36,6 @@ class EntregasData
             emp_ent.id = ent.id_empleado_entrega
         LEFT JOIN empleado emp_rec ON
             emp_rec.id = ent.id_empleado_recibe
-        LEFT JOIN empleado ctr_rec ON
-            ctr_rec.id = ent.id_contratista_recibe
         WHERE 1 = 1
         ';
 
@@ -88,13 +89,17 @@ class EntregasData
     }
 
     /**
-     * Crear una nueva entrega
+     * Crear una nueva entrega.
+     *
+     * Modelo dual: tanto el que entrega como el que recibe se guardan
+     * con su id de empleado. Si el receptor es un contratista, tambien
+     * va aqui (los contratistas viven en la tabla empleado con
+     * es_contratista = 1).
      */
     public static function crear_entrega(
         int $id_requerimiento,
         int $id_empleado_entrega,
         ?int $id_empleado_recibe,
-        ?int $id_contratista_recibe,
         string $correlativo,
         int $numero_correlativo,
         string $fecha_hora_entrega,
@@ -105,7 +110,6 @@ class EntregasData
             'id_requerimiento_almacen' => $id_requerimiento,
             'id_empleado_entrega' => $id_empleado_entrega,
             'id_empleado_recibe' => $id_empleado_recibe,
-            'id_contratista_recibe' => $id_contratista_recibe,
             'correlativo' => $correlativo,
             'numero_correlativo' => $numero_correlativo,
             'fecha_hora_entrega' => $fecha_hora_entrega,
@@ -114,5 +118,38 @@ class EntregasData
             'created_at' => now(),
             'estado' => EstadoRequerimientoEntrega::Entregado->value
         ]);
+    }
+
+    /**
+     * Marcar una entrega como Anulada. Solo si esta actualmente Entregado.
+     * Devuelve true si actualizo, false si no (porque ya estaba anulada o no existe).
+     */
+    public static function anular_entrega(int $id_entrega): bool
+    {
+        return (bool) RequerimientoAlmacenEntrega::where('id', $id_entrega)
+            ->where('estado', EstadoRequerimientoEntrega::Entregado->value)
+            ->update([
+                'estado' => EstadoRequerimientoEntrega::Anulado->value,
+            ]);
+    }
+
+    /**
+     * Obtener los detalles de una entrega con los datos necesarios para
+     * reintegrar stock al lote correspondiente (id_lote, cantidades).
+     */
+    public static function get_detalles_para_reintegrar(int $id_entrega): array
+    {
+        $sql = '
+        SELECT
+            raed.id AS id_entrega_detalle,
+            raed.id_requerimiento_almacen_detalle,
+            raed.id_lote_producto,
+            raed.cantidad_base,
+            raed.cantidad_lote,
+            raed.cantidad_requerimiento
+        FROM requerimiento_almacen_entrega_detalle raed
+        WHERE raed.id_requerimiento_almacen_entrega = :id_entrega
+        ';
+        return DB::select($sql, ['id_entrega' => $id_entrega]);
     }
 }
