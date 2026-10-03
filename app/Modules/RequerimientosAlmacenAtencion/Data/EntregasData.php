@@ -18,9 +18,16 @@ class EntregasData
         // Tanto el que entrega como el que recibe son empleados de la
         // tabla empleado (los contratistas con es_contratista=1 tambien
         // viven alli). Por eso hacemos JOIN solo a empleado dos veces.
+        //
+        // IMPORTANTE: `id_requerimiento_almacen` e `id_empleado_entrega`
+        // deben ir en el SELECT porque `EntregaService::anular_entrega`
+        // los lee del row para conocer a que requerimiento pertenece la
+        // entrega y para registrar el log de trazabilidad.
         $sql = '
         SELECT
             ent.id AS id_requerimiento_almacen_entrega,
+            ent.id_requerimiento_almacen,
+            ent.id_empleado_entrega,
             CONCAT(emp_ent.nombre," ",emp_ent.apellido) AS empleado_entrega,
             CONCAT(emp_rec.nombre," ",emp_rec.apellido) AS empleado_recibe,
             CASE WHEN emp_rec.es_contratista = 1 THEN 1 ELSE 0 END AS receptor_es_contratista,

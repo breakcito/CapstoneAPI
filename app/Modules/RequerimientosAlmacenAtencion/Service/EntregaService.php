@@ -53,10 +53,15 @@ class EntregaService
      * 4. Si NO quedan entregas activas en el requerimiento, devuelve
      *    el requerimiento a estado "Generado" para que pueda recibir
      *    nuevas entregas.
+     *
+     * @param int $id_empleado_anula Id del empleado que ejecuta la
+     *                                anulacion (logueado). Se usa para
+     *                                firmar el log de trazabilidad
+     *                                ("Entrega X anulada por Y").
      */
-    public static function anular_entrega(int $id_entrega, ?string $motivo = null)
+    public static function anular_entrega(int $id_entrega, ?string $motivo = null, ?int $id_empleado_anula = null)
     {
-        return DB::transaction(function () use ($id_entrega, $motivo) {
+        return DB::transaction(function () use ($id_entrega, $motivo, $id_empleado_anula) {
             $entrega = EntregasData::get_entrega_by_id($id_entrega);
             if (!$entrega) {
                 return ApiResponse::error('Entrega no encontrada', 404);
@@ -125,15 +130,24 @@ class EntregaService
             // 4. Registrar evento de trazabilidad para cada detalle que
             //    estaba en esta entrega. Asi el Seguimiento del requerimiento
             //    muestra "Entrega anulada" con el motivo.
+            //    Si por algun motivo no nos pasan el id del empleado
+            //    (caso defensivo), usamos el de la propia entrega como
+            //    fallback para no perder la firma del log.
+            $id_empleado_log = $id_empleado_anula;
+            if ($id_empleado_log === null) {
+                $id_empleado_log = isset($entrega->id_empleado_entrega)
+                    ? (int) $entrega->id_empleado_entrega
+                    : null;
+            }
             foreach ($detalles as $det) {
                 RequerimientosDetalleData::insert_detalle_log(
                     id_detalle: (int) $det->id_requerimiento_almacen_detalle,
-                    id_empleado: $id_empleado_entrega,
+                    id_empleado: $id_empleado_log,
                     estado: \App\Shared\Enums\RequerimientoAlmacen\EstadoRequerimientoDetalle::Pendiente->value,
                     descripcion: sprintf(
                         'Entrega %s anulada por %s. Stock reintegrado.%s',
                         $entrega->correlativo,
-                        EmpleadoHelper::nombre_completo($id_empleado_entrega),
+                        $id_empleado_log ? EmpleadoHelper::nombre_completo($id_empleado_log) : 'sistema',
                         $motivo ? " Motivo: {$motivo}" : ''
                     )
                 );

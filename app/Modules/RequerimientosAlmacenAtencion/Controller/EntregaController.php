@@ -88,7 +88,11 @@ class EntregaController extends Controller
 
         $motivo = $request->input('motivo');
 
-        $result = EntregaService::anular_entrega($id, $motivo);
+        $result = EntregaService::anular_entrega(
+            id_entrega: $id,
+            motivo: $motivo,
+            id_empleado_anula: (int) $authUser->id_empleado,
+        );
 
         return response()->json($result);
     }
