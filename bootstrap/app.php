@@ -23,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 require base_path('app/Modules/LotesProductos/LotesEndpoints.php');
                 require base_path('app/Modules/RequerimientosAlmacenAtencion/RequerimientosAtencionEndpoints.php');
                 require base_path('app/Modules/KardexProductos/KardexEndpoints.php');
+                require base_path('app/Modules/Indicadores/IndicadoresEndpoints.php');
                 require base_path('app/Modules/Roles/RolesEndpoints.php');
                 require base_path('app/Modules/Cuentas/CuentasEndpoints.php');
                 require base_path('app/Modules/Perfil/PerfilEndpoints.php');

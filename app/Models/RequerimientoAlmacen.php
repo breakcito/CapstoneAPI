@@ -115,7 +115,13 @@ class RequerimientoAlmacen extends Model
         }
 
         if ($mes && $yearcito) {
-            $sql .= ' AND MONTH(ra.created_at) = :mes AND YEAR(ra.created_at) = :yearcito';
+            // Filtra por la fecha REAL del negocio (fecha_solicitud), no por
+            // la fecha automatica de insercion (created_at). Esto permite
+            // que al cargar data retroactiva, los pedidos aparezcan en su mes
+            // REAL aunque se hayan ingresado al sistema en otro mes.
+            // Fallback a created_at solo si fecha_solicitud es NULL.
+            $sql .= ' AND MONTH(COALESCE(ra.fecha_solicitud, ra.created_at)) = :mes';
+            $sql .= ' AND YEAR(COALESCE(ra.fecha_solicitud, ra.created_at)) = :yearcito';
             $params['mes'] = $mes;
             $params['yearcito'] = $yearcito;
         }
