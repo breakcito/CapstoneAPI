@@ -47,7 +47,8 @@ SELECT
            WHERE rae.estado = 'Entregado'
            GROUP BY rae.id_requerimiento_almacen
        ) primera ON primera.id_requerimiento_almacen = ra.id
-       WHERE ra.estado NOT IN ('Anulado','Cerrado')
+       WHERE ra.estado IN ('Completado','Cerrado','En Despacho','Atendido Parcial')
+         AND COALESCE(ra.fecha_solicitud, ra.created_at) >= DATE_SUB(NOW(), INTERVAL 30 DAY)
     ) AS tda_minutos_promedio,
 
     -- Indice de Registro de Exactitud (proxy)
@@ -250,7 +251,8 @@ INNER JOIN (
     WHERE rae.estado = 'Entregado'
     GROUP BY rae.id_requerimiento_almacen
 ) primera ON primera.id_requerimiento_almacen = ra.id
-WHERE ra.estado NOT IN ('Anulado','Cerrado')
+WHERE ra.estado IN ('Completado','Cerrado','En Despacho','Atendido Parcial')
+  AND COALESCE(ra.fecha_solicitud, ra.created_at) >= DATE_SUB(NOW(), INTERVAL 30 DAY)
 GROUP BY alm.id, alm.nombre
 ORDER BY tap_minutos ASC;
 
