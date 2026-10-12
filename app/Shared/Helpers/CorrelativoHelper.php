@@ -43,16 +43,19 @@ class CorrelativoHelper
         $columnaFechaCompleta = str_contains($columnaFecha, '.') ? $columnaFecha : "{$prefijoTabla}.{$columnaFecha}";
 
         // 2. Filtro por periodo
+        //    Dias / Meses / Anos son alias semanticos de Diario / Mensual /
+        //    Anual (mismo periodo, distinta forma gramatical). PHP match
+        //    exige cubrirlos explicitamente o lanza UnhandledMatchError.
         match ($reseteo) {
-            Periodo::Diario => $query->whereDate($columnaFechaCompleta, $now->toDateString()),
+            Periodo::Diario, Periodo::Dias => $query->whereDate($columnaFechaCompleta, $now->toDateString()),
             Periodo::Semanal => $query->whereBetween($columnaFechaCompleta, [
                 $now->startOfWeek()->startOfDay(),
                 $now->endOfWeek()->endOfDay(),
             ]),
-            Periodo::Mensual => $query
+            Periodo::Mensual, Periodo::Meses => $query
                 ->whereYear($columnaFechaCompleta, $now->year)
                 ->whereMonth($columnaFechaCompleta, $now->month),
-            Periodo::Anual => $query->whereYear($columnaFechaCompleta, $now->year),
+            Periodo::Anual, Periodo::Anos => $query->whereYear($columnaFechaCompleta, $now->year),
             Periodo::Ninguno => null,
         };
 
@@ -68,10 +71,10 @@ class CorrelativoHelper
         $numeroFormateado = str_pad($siguienteNumero, $longitudCeros, '0', STR_PAD_LEFT);
 
         $segmentoFecha = match ($reseteo) {
-            Periodo::Diario => $now->format('d') . '-' . $now->format('m') . '-' . $now->format('y'),
+            Periodo::Diario, Periodo::Dias => $now->format('d') . '-' . $now->format('m') . '-' . $now->format('y'),
             Periodo::Semanal => $now->weekOfMonth . '-' . $now->format('m') . '-' . $now->format('y'),
-            Periodo::Mensual => $now->format('m') . '-' . $now->format('y'),
-            Periodo::Anual => $now->format('y'),
+            Periodo::Mensual, Periodo::Meses => $now->format('m') . '-' . $now->format('y'),
+            Periodo::Anual, Periodo::Anos => $now->format('y'),
             Periodo::Ninguno => null,
         };
 
