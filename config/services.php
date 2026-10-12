@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'minimax' => [
+        'url' => env('IA_BASE_URL', 'https://api.minimax.io/v1'),
+        'key' => env('IA_API_KEY'),
+        'model' => env('IA_MODEL', 'MiniMax-M3'),
+    ],
+
 ];

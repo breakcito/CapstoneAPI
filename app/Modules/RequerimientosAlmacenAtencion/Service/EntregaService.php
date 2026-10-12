@@ -207,7 +207,9 @@ class EntregaService
             $lotesMap = !empty($ids_lotes)
                 ? collect(LotesProductosData::get_lote_dinamico_by_id(
                     id_lote: $ids_lotes,
-                    columnas: ['stock_actual_base', 'correlativo', 'contenido_por_presentacion']
+                    // costo_por_unidad es obligatorio: se lee mas abajo para
+                    // valorizar el subtotal de la linea de entrega.
+                    columnas: ['stock_actual_base', 'correlativo', 'contenido_por_presentacion', 'costo_por_unidad']
                 ))->keyBy('id_lote')
                 : collect();
 
