@@ -3,7 +3,7 @@
 namespace App\Modules\IA\Controller;
 
 use App\Modules\IA\Service\IAService;
-use App\Modules\IA\Service\ReportGenerator;
+use App\Modules\IA\Service\ReportePdfService;
 use App\Shared\Responses\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -105,13 +105,13 @@ class IAController extends Controller
             return response()->json(ApiResponse::error('No autorizado para el modulo de IA'), 403);
         }
 
-        if (! ReportGenerator::existe($uuid)) {
+        if (! ReportePdfService::existe($uuid)) {
             return response()->json(ApiResponse::error('Reporte no encontrado o expirado'), 404);
         }
 
-        $nombre = ReportGenerator::nombreDe($uuid);
+        $nombre = ReportePdfService::nombreDe($uuid);
 
-        return ReportGenerator::descargar($uuid, $nombre);
+        return ReportePdfService::descargar($uuid, $nombre);
     }
 
     /**
