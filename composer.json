@@ -36,8 +36,9 @@
         }
     },
     "scripts": {
-        "test": "phpunit",
-        "test:casos": "phpunit --testsuite CasosDeUso",
+        "test": "phpunit --testdox",
+        "test:casos": "phpunit --testsuite CasosDeUso --testdox",
+        "test:html": "@php tests/reporte-html.php",
         "setup": [
             "composer install",
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
@@ -67,7 +68,6 @@
         "pre-package-uninstall": [
             "Illuminate\\Foundation\\ComposerScripts::prePackageUninstall"
         ],
-        "test:html": "@php tests/reporte-html.php",
         "test:ia": "phpunit --group ia"
     },
     "extra": {
