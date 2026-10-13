@@ -19,7 +19,7 @@ class ToolRegistry
             new ListarTablasTool,
             new DescribirTablaTool,
             new EjecutarSQLTool,
-            new GenerarReporteTool,
+            new GenerarPdfTool,
         ] as $tool) {
             $this->tools[$tool->nombre()] = $tool;
         }

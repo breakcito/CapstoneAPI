@@ -121,10 +121,13 @@ class IAService
                 $resultado = $registry->ejecutar($llamada['nombre'], $args);
                 $esError = str_starts_with($resultado, '[ERROR]');
 
+                // El usuario nunca ve el nombre de la herramienta ni su
+                // preview: solo ve "ok" / "error" cuando algo fallo y debe
+                // reintentarse. El system prompt fija las reglas del modelo.
                 $emitir('tool', [
                     'nombre' => $llamada['nombre'],
                     'estado' => $esError ? 'error' : 'ok',
-                    'preview' => self::resumirHerramienta($llamada['nombre'], $resultado),
+                    'preview' => '',
                 ]);
 
                 // Un reporte va directo al archivo del usuario: se genera en
@@ -144,7 +147,7 @@ class IAService
                     $emitir('archivo', [
                         'uuid' => $reporte['uuid'],
                         'nombre' => $reporte['nombre'],
-                        'filas' => $reporte['filas'],
+                        'bytes' => $reporte['bytes'],
                     ]);
                 }
             }
@@ -268,45 +271,12 @@ class IAService
     }
 
     /**
-     * Linea legible para la UI. El modelo recibe el JSON completo; el usuario
-     * ve "2 filas · 7 columnas" y no un muro de JSON crudo.
+     * Reservado por compatibilidad: el usuario ya no ve este resumen en la UI.
+     * Se conserva el metodo por si vuelve a hacer falta para un panel admin o
+     * para el sistema de logs. Devuelve string vacio para no contaminar el chat.
      */
     private static function resumirHerramienta(string $nombre, string $resultado): string
     {
-        if (str_starts_with($resultado, '[ERROR]')) {
-            return trim(mb_substr($resultado, 8));
-        }
-
-        $datos = json_decode($resultado, true);
-
-        if (! is_array($datos)) {
-            return mb_substr(trim($resultado), 0, 120);
-        }
-
-        if ($nombre === 'ejecutar_sql') {
-            $filas = count($datos['filas'] ?? []);
-            $columnas = count($datos['columnas'] ?? []);
-            $sufijo = isset($datos['aviso']) ? ' (truncado)' : '';
-
-            return "{$filas} fila".($filas === 1 ? '' : 's')." · {$columnas} columnas{$sufijo}";
-        }
-
-        if ($nombre === 'generar_reporte') {
-            return sprintf('%s · %d filas', $datos['nombre'] ?? 'archivo', $datos['filas'] ?? 0);
-        }
-
-        if ($nombre === 'listar_tablas') {
-            $tablas = count($datos['tablas'] ?? []);
-
-            return "{$tablas} tablas y vistas del esquema";
-        }
-
-        if ($nombre === 'describir_tabla') {
-            $columnas = count($datos['descripcion']['columnas'] ?? []);
-
-            return sprintf('%s · %d columnas', $datos['tabla'] ?? '', $columnas);
-        }
-
         return '';
     }
 
@@ -325,7 +295,7 @@ class IAService
     }
 
     /**
-     * @return array{uuid: string, nombre: string, filas: int}|null
+     * @return array{uuid: string, nombre: string, bytes: int}|null
      */
     private static function detectarReporte(string $resultado): ?array
     {
@@ -342,7 +312,7 @@ class IAService
         return [
             'uuid' => (string) $datos['uuid'],
             'nombre' => (string) $datos['nombre'],
-            'filas' => (int) ($datos['filas'] ?? 0),
+            'bytes' => (int) ($datos['bytes'] ?? 0),
         ];
     }
 
