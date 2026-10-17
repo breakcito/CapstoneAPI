@@ -31,11 +31,8 @@ class IAService
             ['role' => 'system', 'content' => SystemPrompt::build(SchemaService::resumen())],
         ];
 
-        foreach ($mensajes as $mensaje) {
-            $historial[] = [
-                'role' => (string) ($mensaje['role'] ?? 'user'),
-                'content' => $mensaje['content'] ?? '',
-            ];
+        foreach (self::prepararMensajes($mensajes) as $item) {
+            $historial[] = $item;
         }
 
         // Los adjuntos se anexan al ultimo turno del usuario y se quedan ahi
@@ -102,17 +99,35 @@ class IAService
             foreach ($toolCalls as $llamada) {
                 $args = self::decodificarArgumentos($llamada['argumentos']);
 
+                // Anunciamos al frontend la llamada ANTES de correrla: asi el
+                // store guarda el tool_call en el mensaje del assistant y lo
+                // puede reenviar tal cual al backend en turnos posteriores.
+                $emitir('tool_call', [
+                    'id' => $llamada['id'],
+                    'nombre' => $llamada['nombre'],
+                    'argumentos' => $llamada['argumentos'],
+                ]);
+
                 if ($args === null) {
+                    $contenido = '[ERROR] Los argumentos de la herramienta no son JSON valido.';
+                    $esError = true;
+
                     $emitir('tool', [
                         'nombre' => $llamada['nombre'],
                         'estado' => 'error',
                         'preview' => 'Los argumentos no son JSON valido.',
                     ]);
+                    $emitir('tool_result', [
+                        'tool_call_id' => $llamada['id'],
+                        'nombre' => $llamada['nombre'],
+                        'estado' => 'error',
+                        'content' => $contenido,
+                    ]);
 
                     $historial[] = [
                         'role' => 'tool',
                         'tool_call_id' => $llamada['id'],
-                        'content' => '[ERROR] Los argumentos de la herramienta no son JSON valido.',
+                        'content' => $contenido,
                     ];
 
                     continue;
@@ -120,6 +135,14 @@ class IAService
 
                 $resultado = $registry->ejecutar($llamada['nombre'], $args);
                 $esError = str_starts_with($resultado, '[ERROR]');
+
+                // El contenido que el modelo vera como respuesta de la
+                // herramienta. Es el mismo string que se guarda en el historial
+                // y se emite al frontend, asi el siguiente turno reconstruye
+                // la conversacion de forma consistente.
+                $contenido = $llamada['nombre'] === 'generar_reporte'
+                    ? $resultado
+                    : self::revisar($resultado, $args);
 
                 // El usuario nunca ve el nombre de la herramienta ni su
                 // preview: solo ve "ok" / "error" cuando algo fallo y debe
@@ -129,15 +152,17 @@ class IAService
                     'estado' => $esError ? 'error' : 'ok',
                     'preview' => '',
                 ]);
+                $emitir('tool_result', [
+                    'tool_call_id' => $llamada['id'],
+                    'nombre' => $llamada['nombre'],
+                    'estado' => $esError ? 'error' : 'ok',
+                    'content' => $contenido,
+                ]);
 
-                // Un reporte va directo al archivo del usuario: se genera en
-                // el servidor y lo descarga. No hay nada que revisar aqui.
                 $historial[] = [
                     'role' => 'tool',
                     'tool_call_id' => $llamada['id'],
-                    'content' => $llamada['nombre'] === 'generar_reporte'
-                        ? $resultado
-                        : self::revisar($resultado, $args),
+                    'content' => $contenido,
                 ];
 
                 // El modelo adjunto un archivo que el usuario puede bajar.
@@ -324,5 +349,88 @@ class IAService
     public static function validarAdjuntos(array $adjuntos): void
     {
         AdjuntoExtractor::procesar($adjuntos);
+    }
+
+    /**
+     * Traduce el historial del frontend al formato OpenAI-compat que espera
+     * el proveedor (mensajes de assistant con `tool_calls`, mensajes `tool`
+     * con `tool_call_id` y `name`).
+     *
+     * Acepta dos formas de entrada para convivir con clientes viejos:
+     *  - Antigua: `{role, content}`. Se acepta y se proyecta.
+     *  - Nueva:   `{role, content, tool_calls}` o `{role, content, tool_call_id, name}`.
+     *             Se preserva tal cual, salvo los tool_calls que se reempaquetan
+     *             a la forma `{id, type, function{name, arguments}}`.
+     *
+     * @param  array<int, array<string, mixed>>  $mensajes
+     * @return array<int, array<string, mixed>>
+     */
+    private static function prepararMensajes(array $mensajes): array
+    {
+        $salida = [];
+
+        foreach ($mensajes as $mensaje) {
+            if (! is_array($mensaje)) {
+                continue;
+            }
+
+            $rol = (string) ($mensaje['role'] ?? 'user');
+            $contenido = (string) ($mensaje['content'] ?? '');
+            $item = ['role' => $rol, 'content' => $contenido];
+
+            if ($rol === 'assistant' && ! empty($mensaje['tool_calls']) && is_array($mensaje['tool_calls'])) {
+                $item['tool_calls'] = array_values(array_map(
+                    static function ($llamada): array {
+                        $llamada = is_array($llamada) ? $llamada : [];
+                        $funcion = is_array($llamada['function'] ?? null) ? $llamada['function'] : [];
+
+                        $nombre = (string) (
+                            $funcion['name']
+                            ?? $llamada['nombre']
+                            ?? $llamada['name']
+                            ?? ''
+                        );
+                        $argumentos = (string) (
+                            $funcion['arguments']
+                            ?? $llamada['argumentos']
+                            ?? ''
+                        );
+
+                        return [
+                            'id' => (string) ($llamada['id'] ?? ''),
+                            'type' => 'function',
+                            'function' => [
+                                'name' => $nombre,
+                                'arguments' => $argumentos === '' ? '{}' : $argumentos,
+                            ],
+                        ];
+                    },
+                    $mensaje['tool_calls'],
+                ));
+            }
+
+            if ($rol === 'tool') {
+                if (! empty($mensaje['tool_call_id'])) {
+                    $item['tool_call_id'] = (string) $mensaje['tool_call_id'];
+                }
+                if (! empty($mensaje['name'])) {
+                    $item['name'] = (string) $mensaje['name'];
+                }
+            }
+
+            // Compactacion: descartamos mensajes vacios sin tool_calls para
+            // no contaminar el contexto. Los `tool` y los assistant con
+            // tool_calls pasan aunque tengan content vacio: la API los valida.
+            if ($rol !== 'tool'
+                && ! isset($item['tool_calls'])
+                && trim($contenido) === ''
+            ) {
+                continue;
+            }
+
+            $salida[] = $item;
+        }
+
+        return $salida;
     }
 }
