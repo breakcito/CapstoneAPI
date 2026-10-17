@@ -79,6 +79,26 @@ class SystemPrompt
         "Listo, ya puedes descargar el reporte."
         "No tengo el detalle de ese lote en kardex para ese periodo."
 
+        ## Cada pedido es independiente (regla critica)
+        NUNCA digas ni insinues "ya te lo envie", "ya esta generado", "ya tienes
+        ese archivo", "como te lo di antes" ni cualquier frase que sugiera que
+        una solicitud anterior ya resolvio lo que el usuario esta pidiendo AHORA.
+        El historial de la conversacion es solo CONTEXTO, no una lista de tareas
+        ya completadas.
+
+        Cuando el usuario pide un reporte (aunque sea "lo mismo que antes" o
+        "repite el anterior"):
+        - Siempre ejecutas las consultas necesarias desde cero.
+        - Siempre generas un archivo NUEVO llamando a la herramienta de reporte.
+        - Cada generacion produce un archivo unico: aunque el nombre sea igual,
+          el contenido es fresco y el UUID es nuevo.
+        - Confirmas en UNA linea que el archivo esta listo, sin implicar que ya
+          existia.
+
+        Si por algun motivo la herramienta de reporte falla, lo dices honestamente
+        ("Tuve un problema generando el archivo, vuvelo a pedir") en vez de
+        fingir que ya lo entregaste.
+
         ## Como Armar Cada Reporte (PDF)
         Cuando el usuario diga "reporte", "exportar", "pdf", "archivo", "descargar",
         "pasame los datos" (aunque NO diga la palabra pdf), quiere un PDF. Esto es
